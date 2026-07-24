@@ -4,8 +4,8 @@ import sys
 import json
 import subprocess
 import urllib.request
-import textwrap
 import re
+import shutil
 from pathlib import Path
 
 PARENT_DIR = Path.home() / "Desktop" / "Clan Reps"
@@ -14,10 +14,15 @@ TEMPLATES_DIR = SCRIPT_DIR / "templates"
 API_BASE = "https://playninjarift.com/api"
 
 GITHUB_USER = None
+DRY_RUN = False
 
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+
+
+def dry_prefix():
+    return "[DRY-RUN] " if DRY_RUN else ""
 
 
 def gh(*args, capture=True, check=True):
@@ -68,6 +73,18 @@ def prompt_yn(question, default="Y"):
     return raw.startswith("y")
 
 
+def prompt_file(question):
+    raw = input(f"  {question}: ").strip()
+    if not raw:
+        return None
+    raw = raw.strip('"').strip("'")
+    p = Path(raw)
+    if not p.exists():
+        print(f"  File not found: {raw}")
+        return None
+    return p
+
+
 def fetch_json(url):
     req = urllib.request.Request(url, headers={"User-Agent": "clan-repo-creator/1.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
@@ -83,7 +100,7 @@ def fetch_clan_info(clan_id):
             "members": len(data.get("members", [])),
             "id": clan_id,
         }
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -103,7 +120,11 @@ def read_template(name):
 
 
 def create_repo(name, visibility, description):
-    print(f"\n  Creating repo {GITHUB_USER}/{name}...")
+    pfx = dry_prefix()
+    print(f"\n  {pfx}Creating repo {GITHUB_USER}/{name}...")
+    if DRY_RUN:
+        print(f"  {pfx}Would run: gh repo create {GITHUB_USER}/{name} --{visibility}")
+        return True
     result = gh("repo", "create", f"{GITHUB_USER}/{name}",
                 f"--{visibility}",
                 "--description", description,
@@ -119,19 +140,37 @@ def create_repo(name, visibility, description):
 
 
 def clone_repo(name):
-    print(f"  Cloning {GITHUB_USER}/{name}...")
+    pfx = dry_prefix()
+    print(f"  {pfx}Cloning {GITHUB_USER}/{name}...")
     target = PARENT_DIR / name
+    if DRY_RUN:
+        print(f"  {pfx}Would clone to {target}")
+        return target
     if target.exists():
         print(f"  Directory {target} already exists. Removing...")
-        import shutil
         shutil.rmtree(target)
     gh("repo", "clone", f"{GITHUB_USER}/{name}", str(target), capture=False)
     return target
 
 
 def write_file(path, content):
+    pfx = dry_prefix()
+    if DRY_RUN:
+        print(f"  {pfx}Would write {path.name} to {path.parent}")
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def copy_file(src, dst):
+    pfx = dry_prefix()
+    if DRY_RUN:
+        print(f"  {pfx}Would copy {src.name} -> {dst}")
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    size = src.stat().st_size
+    print(f"  Copied {src.name} ({size//1024} KB)")
 
 
 def write_templated_file(dst_path, template_name, subs):
@@ -142,7 +181,11 @@ def write_templated_file(dst_path, template_name, subs):
 
 
 def enable_pages(name):
-    print(f"  Enabling GitHub Pages...")
+    pfx = dry_prefix()
+    print(f"  {pfx}Enabling GitHub Pages...")
+    if DRY_RUN:
+        print(f"  {pfx}Would POST repos/{GITHUB_USER}/{name}/pages")
+        return
     try:
         result = gh("api", f"repos/{GITHUB_USER}/{name}/pages",
                     "-X", "POST",
@@ -162,7 +205,11 @@ def enable_pages(name):
 
 
 def trigger_workflow(name):
-    print(f"  Triggering first workflow run...")
+    pfx = dry_prefix()
+    print(f"  {pfx}Triggering first workflow run...")
+    if DRY_RUN:
+        print(f"  {pfx}Would run: gh workflow run clan-snapshot.yml --ref main")
+        return
     try:
         gh("workflow", "run", "clan-snapshot.yml", "--ref", "main",
            repo=f"{GITHUB_USER}/{name}", capture=False)
@@ -173,9 +220,13 @@ def trigger_workflow(name):
 
 
 def print_header():
+    pfx = dry_prefix()
     print()
-    print("  NinjaRift Clan Repo Creator")
-    print("  " + "-" * 40)
+    print(f"  {pfx}NinjaRift Clan Repo Creator")
+    print(f"  " + "-" * 40)
+    if DRY_RUN:
+        print(f"  Running in DRY-RUN mode — no changes will be made.")
+        print()
     print()
 
 
@@ -194,7 +245,9 @@ def print_summary(name, clan_info):
 
 
 def main():
-    global GITHUB_USER
+    global GITHUB_USER, DRY_RUN
+
+    DRY_RUN = "--dry-run" in sys.argv
 
     print_header()
 
@@ -234,23 +287,52 @@ def main():
         visibility = "private"
     create_desc = f"NinjaRift clan {clan_id} ({clan_info['name']}) reputation snapshots"
 
-    # Confirm
-    print(f"\n  3. Confirm")
-    print(f"     GitHub user: {GITHUB_USER}")
-    print(f"     Repo: {GITHUB_USER}/{repo_name} ({visibility})")
-    print(f"     Clan ID: {clan_id} ({clan_info['name']})")
+    # Step 3: Logo / Favicon
+    print("\n  3. Media (optional)")
+    logo_path = None
+    while True:
+        p = prompt_file("Logo image (drag file here or Enter to skip)")
+        if p is None:
+            break
+        ext = p.suffix.lower()
+        if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+            logo_path = p
+            break
+        print(f"  Unsupported format '{ext}'. Use PNG, JPG, GIF, or WebP.")
+    favicon_path = None
+    while True:
+        p = prompt_file("Favicon icon (drag file here or Enter to skip)")
+        if p is None:
+            break
+        ext = p.suffix.lower()
+        if ext in (".ico", ".png"):
+            favicon_path = p
+            break
+        print(f"  Unsupported format '{ext}'. Use ICO or PNG.")
+
+    # Step 4: Confirm
+    print(f"\n  4. Confirm")
+    print(f"     GitHub user:    {GITHUB_USER}")
+    print(f"     Repo:           {GITHUB_USER}/{repo_name} ({visibility})")
+    print(f"     Clan ID:        {clan_id} ({clan_info['name']} \u00b7 {clan_info['members']} members)")
+    print(f"     Logo:           {logo_path.name + ' (' + str(logo_path.stat().st_size // 1024) + ' KB)' if logo_path else '(none)'}")
+    print(f"     Favicon:        {favicon_path.name + ' (' + str(favicon_path.stat().st_size // 1024) + ' KB)' if favicon_path else '(none)'}")
+    print(f"     Dry-run mode:   {'Yes' if DRY_RUN else 'No'}")
     if not prompt_yn("Proceed", default="Y"):
         print("  Cancelled.")
         sys.exit(0)
 
-    # Create repo
+    # Execute
+    pfx = dry_prefix()
     PARENT_DIR.mkdir(parents=True, exist_ok=True)
+
     if not create_repo(repo_name, visibility, create_desc):
         sys.exit(1)
 
-    # Clone
     repo_path = clone_repo(repo_name)
-    os.chdir(repo_path)
+
+    if not DRY_RUN:
+        os.chdir(repo_path)
 
     # Write files
     subs = {
@@ -259,25 +341,38 @@ def main():
         "GITHUB_USER": GITHUB_USER,
         "REPO_NAME": repo_name,
     }
-    print("  Writing workflow...")
+    print(f"  {pfx}Writing .github/workflows/clan-snapshot.yml...")
     write_templated_file(
         repo_path / ".github" / "workflows" / "clan-snapshot.yml",
         "workflow.yml", subs,
     )
+    print(f"  {pfx}Writing README.md...")
     write_templated_file(
         repo_path / "README.md",
         "README.md", subs,
     )
+    print(f"  {pfx}Writing .gitignore...")
     write_templated_file(
         repo_path / ".gitignore",
         ".gitignore", subs,
     )
 
+    # Copy media files
+    if logo_path:
+        print(f"  {pfx}Copying logo...")
+        copy_file(logo_path, repo_path / "clan_logo.png")
+    if favicon_path:
+        print(f"  {pfx}Copying favicon...")
+        copy_file(favicon_path, repo_path / "favicon.ico")
+
     # Commit & push
-    print("  Committing and pushing...")
-    os.system("git add -A")
-    os.system('git commit -m "init: clan snapshot setup" --allow-empty')
-    os.system("git push origin main")
+    if not DRY_RUN:
+        print(f"  Committing and pushing...")
+        os.system("git add -A")
+        os.system('git commit -m "init: clan snapshot setup" --allow-empty')
+        os.system("git push origin main")
+    else:
+        print(f"  {pfx}Would commit and push 4+ files")
 
     # Enable Pages
     enable_pages(repo_name)
@@ -288,12 +383,13 @@ def main():
     # Done
     print_summary(repo_name, clan_info)
 
-    if prompt_yn("Open site in browser", default="Y"):
+    if not DRY_RUN and prompt_yn("Open site in browser", default="Y"):
         site = f"https://{GITHUB_USER}.github.io/{repo_name}/"
         import webbrowser
         webbrowser.open(site)
 
-    os.chdir(str(PARENT_DIR))
+    if not DRY_RUN:
+        os.chdir(str(PARENT_DIR))
 
 
 if __name__ == "__main__":
