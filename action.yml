@@ -1,0 +1,17 @@
+name: 'NinjaRift Clan Snapshot'
+description: 'Generate and deploy clan reputation snapshots for NinjaRift'
+inputs:
+  clan-id:
+    description: 'NinjaRift clan ID (e.g., 2527)'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Install dependencies
+      run: pip install openpyxl
+      shell: bash
+    - name: Run snapshot
+      run: python "${{ github.action_path }}/run.py" --clan-id ${{ inputs.clan-id }}
+      shell: bash
+      env:
+        GITHUB_REPOSITORY: ${{ github.repository }}
