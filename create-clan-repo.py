@@ -285,6 +285,8 @@ def main():
     visibility = "public"
     if not prompt_yn("Public repo", default="Y"):
         visibility = "private"
+    if not DRY_RUN:
+        DRY_RUN = prompt_yn("Dry-run mode (preview only, no changes)", default="N")
     create_desc = f"NinjaRift clan {clan_id} ({clan_info['name']}) reputation snapshots"
 
     # Step 3: Logo / Favicon
