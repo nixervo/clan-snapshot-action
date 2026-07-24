@@ -1408,7 +1408,7 @@ def save_daily_history():
 </head>
 <body>
 <div class="container">
-  <div class="header"><h1>Daily Reps · {date} ({day_name}){(" · " + season_label) if season_label else ""}Min: <b>{threshold:,}</b></div></div>
+  <div class="header"><h1>Daily Reps · {date} ({day_name}){(" · " + season_label) if season_label else ""}Min: <b>{threshold:,}</b></h1></div>
   <div class="summary">{met_count} of {total_current} members met the threshold ({threshold:,})</div>
   <div class="nav">{prev_link}<a href="history.html">Index</a>{next_link}</div>
   <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Gain</th><th>Status</th></tr></thead><tbody>{rows_html}</tbody></table></div>
