@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   snapshot:
@@ -25,3 +26,5 @@ jobs:
           git add -A
           git commit -m "auto: snapshot $(date -u '+%Y-%m-%d %H:%M:%S')" --allow-empty
           git push
+          sleep 1800
+          gh workflow run "Clan Snapshot" --repo ${{ github.repository }}
