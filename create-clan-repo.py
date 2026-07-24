@@ -576,7 +576,7 @@ def input_repo(state):
     if prompt_yn("Public repo", default="Y" if state.get("visibility") == "public" else "N"):
         visibility = "public"
     if not state["dry_run"]:
-        state["dry_run"] = not prompt_yn("Dry-run mode (preview only, no changes)", default="N" if state["dry_run"] else "N")
+        state["dry_run"] = prompt_yn("Dry-run mode (preview only, no changes)", default="N")
     state["repo_name"] = repo_name
     state["display_name"] = display_name
     state["visibility"] = visibility
