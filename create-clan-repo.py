@@ -6,15 +6,22 @@ import subprocess
 import urllib.request
 import re
 import shutil
+import tempfile
+import webbrowser
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
 
 PARENT_DIR = Path.home() / "Desktop" / "Clan Reps"
 SCRIPT_DIR = Path(__file__).parent
 TEMPLATES_DIR = SCRIPT_DIR / "templates"
 API_BASE = "https://playninjarift.com/api"
+SEASON_API = "https://playninjarift.com/api/refresh_time_website.php"
+RANKING_API = "https://playninjarift.com/api/clan_ranking_website.php"
 
 GITHUB_USER = None
 DRY_RUN = False
+TARGET_TZ = timezone(timedelta(hours=8))
+SERVER_TZ = timezone(timedelta(hours=-5))
 
 
 def eprint(*args, **kwargs):
@@ -99,9 +106,28 @@ def fetch_clan_info(clan_id):
             "name": data.get("clan_name", "Unknown"),
             "members": len(data.get("members", [])),
             "id": clan_id,
+            "raw": data,
         }
     except Exception:
         return None
+
+
+def fetch_season_info():
+    try:
+        return fetch_json(SEASON_API)
+    except Exception:
+        return None
+
+
+def fetch_ranking(clan_id):
+    try:
+        data = fetch_json(RANKING_API)
+        for entry in data:
+            if entry["clan_id"] == clan_id:
+                return entry
+    except Exception:
+        pass
+    return {}
 
 
 def slugify(text):
@@ -244,6 +270,226 @@ def print_summary(name, clan_info):
     print()
 
 
+def compute_season_preview(end_str, now):
+    if not end_str:
+        return None
+    try:
+        end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=SERVER_TZ).astimezone(timezone.utc)
+    except Exception:
+        return None
+    now_utc = now.astimezone(timezone.utc)
+    if now_utc >= end_dt:
+        return {"days_left": 0, "ended": True}
+    diff = end_dt - now_utc
+    return {"days_left": max(0, diff.days), "ended": False}
+
+
+GOAL_TIERS = [
+    (100000, "5 Stamina Rolls"),
+    (500000, "20 Stamina Rolls"),
+    (750000, "Back Item"),
+    (1000000, "Weapon"),
+    (1600000, "Jutsu"),
+]
+
+
+def compute_goal_preview(clan_reputation):
+    next_tier = None
+    progress = 100.0
+    for threshold, label in GOAL_TIERS:
+        if clan_reputation < threshold:
+            next_tier = (threshold, label)
+            progress = (clan_reputation / threshold) * 100
+            break
+    return {"next_tier": next_tier, "progress": min(progress, 100), "total": clan_reputation}
+
+
+def generate_preview(clan_id, display_name, logo_path, favicon_path):
+    now = datetime.now(TARGET_TZ)
+    ts_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    print(f"  [{ts_str}] Fetching live data for preview...")
+    clan_data = fetch_json(f"{API_BASE}/detail_clan_website.php?clan_id={clan_id}")
+    members = clan_data.get("members", [])
+    member_count = len(members)
+    clan_name = clan_data.get("clan_name", display_name)
+
+    season_info = fetch_season_info()
+    ranking = fetch_ranking(clan_id)
+    clan_reputation = ranking.get("clan_reputation", 0) or sum(m["member_reputation"] for m in members)
+    today_gain = ranking.get("clan_day_points", 0)
+
+    now_dt = datetime.now(TARGET_TZ)
+    season_str = ""
+    season_end_str = ""
+    days_left = None
+    if season_info:
+        season_str = season_info.get("season", "")
+        season_end_str = season_info.get("season_end", "")
+        preview = compute_season_preview(season_end_str, now_dt)
+        if preview and not preview["ended"]:
+            days_left = preview["days_left"]
+        elif preview and preview["ended"]:
+            days_left = 0
+
+    season_display = f"Season {season_str}" if season_str else ""
+    if days_left is not None:
+        season_display += f" ({days_left}d left)" if days_left else " (ending)"
+
+    goal = compute_goal_preview(clan_reputation)
+    goal_pct = f"{goal['progress']:.1f}%"
+    goal_next = f"{goal['next_tier'][1]} ({goal['next_tier'][0]:,})" if goal['next_tier'] else "Max tier reached!"
+    goal_num = f"{clan_reputation:,} / {goal['next_tier'][0]:,}" if goal['next_tier'] else f"{clan_reputation:,} / Max"
+
+    # Logo HTML
+    logo_html = ""
+    if logo_path:
+        import base64
+        b64 = base64.b64encode(logo_path.read_bytes()).decode()
+        ext = logo_path.suffix.lower().lstrip(".")
+        if ext == "jpg":
+            ext = "jpeg"
+        logo_html = f'<img class="logo" src="data:image/{ext};base64,{b64}" alt="Logo">'
+    else:
+        logo_html = '<div class="logo-placeholder">' + clan_name[:2].upper() + "</div>"
+
+    # Favicon HTML
+    favicon_html = ""
+    if favicon_path:
+        import base64
+        b64 = base64.b64encode(favicon_path.read_bytes()).decode()
+        ext = favicon_path.suffix.lower().lstrip(".")
+        favicon_html = f'<link rel="icon" type="image/{ext}" href="data:image/{ext};base64,{b64}">'
+
+    # Member table rows
+    sorted_members = sorted(members, key=lambda m: m["member_reputation"], reverse=True)
+    table_rows = ""
+    for i, m in enumerate(sorted_members):
+        rank = i + 1
+        name = m["character_name"]
+        reps = f"{m['member_reputation']:,}"
+        table_rows += f"<tr><td>{rank}</td><td>{name}</td><td class=\"num\">{reps}</td><td class=\"num na\">-</td><td class=\"num na\">-</td><td class=\"num na\">-</td></tr>\n"
+
+    stats_html = f"""
+  <div class="stats-bar">
+    <div class="stats-row">
+      <div class="stats-col"><span class="stat-label">Today's Gain</span><span class="stat-val" id="today-gain">{today_gain:+,}</span></div>
+      <div class="stats-col"><span class="stat-label">Season Total</span><span class="stat-val">{clan_reputation:,}</span></div>
+      <div class="stats-col"><span class="stat-label">Members</span><span class="stat-val">{member_count}</span></div>
+    </div>
+    <div class="stats-row">
+      <div class="stats-col"><span class="stat-label">Season</span><span class="stat-val" style="color:#eab308;font-size:14px;">{season_display}</span></div>
+    </div>
+  </div>"""
+
+    goal_html = f"""
+  <div class="goal-bar">
+    <div class="goal-info">
+      <span class="goal-num">{goal_num}</span>
+      <span class="goal-next">{goal_next}</span>
+    </div>
+    <div class="goal-track"><div class="goal-fill" style="width:{goal_pct};"></div></div>
+  </div>"""
+
+    preview_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+{favicon_html}
+<title>{display_name} [Preview]</title>
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{ font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #080810; color: #e0e0e0; min-height: 100vh; display: flex; justify-content: center; padding: 32px 16px; }}
+  .container {{ max-width: 960px; width: 100%; box-shadow: 0 0 40px rgba(233, 69, 96, 0.06), 0 8px 32px rgba(0,0,0,0.5); border-radius: 16px; overflow: hidden; }}
+  .header {{ text-align: center; padding: 32px 24px 24px; background: linear-gradient(135deg, #0f0f1e 0%, #1a1a30 50%, #0d1b2a 100%); position: relative; overflow: hidden; }}
+  .header::before {{ content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #e94560, #ff6b8a, #e94560); background-size: 200% 100%; animation: shimmer 3s ease-in-out infinite; }}
+  @keyframes shimmer {{ 0%,100% {{ background-position: 0% 50%; }} 50% {{ background-position: 100% 50%; }} }}
+  .logo {{ width: 132px; height: 132px; object-fit: contain; margin-bottom: 16px; filter: drop-shadow(0 0 16px rgba(233, 69, 96, 0.3)); }}
+  .logo-placeholder {{ width: 132px; height: 132px; margin: 0 auto 16px; border-radius: 50%; background: linear-gradient(135deg, #e94560, #ff6b8a); display: flex; align-items: center; justify-content: center; font-size: 48px; font-weight: 700; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }}
+  .header h1 {{ font-size: 30px; font-weight: 700; color: #fff; letter-spacing: 0.5px; margin-bottom: 4px; }}
+  .header .sub {{ font-size: 17px; color: #888; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }}
+  .header .sub span {{ color: #aaa; }}
+  .table-wrap {{ overflow-x: auto; }}
+  table {{ width: 100%; min-width: 0; border-collapse: collapse; background: #0c0c14; }}
+  th {{ background: #0f0f1e; padding: 14px 18px; text-align: center; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; color: #e94560; font-weight: 600; }}
+  td {{ padding: 11px 18px; border-bottom: 1px solid #14141f; font-size: 14px; color: #ccc; text-align: center; }}
+  tr:nth-child(even) td {{ background: rgba(255,255,255,0.015); }}
+  tr:hover td {{ background: rgba(233, 69, 96, 0.04); }}
+  td.num {{ font-variant-numeric: tabular-nums; }}
+  td:first-child, th:first-child {{ width: 28px; min-width: 28px; text-align: center; color: #666; font-size: 12px; }}
+  .stats-bar {{ display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 20px; background: #0f142373; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 1px solid #1a1a2e; }}
+  .stats-row {{ display: flex; justify-content: center; gap: 48px; width: 100%; }}
+  .stats-col {{ display: flex; flex-direction: column; align-items: center; gap: 2px; }}
+  .stat-label {{ color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }}
+  .stat-val {{ color: #e0e0e0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }}
+  #today-gain {{ color: #4caf50; }}
+  .goal-bar {{ display: flex; flex-direction: column; gap: 4px; padding: 14px 20px; background: #0c0c18; border-top: 1px solid #1a1a2e; }}
+  .goal-track {{ width: 100%; height: 16px; background: #14141f; border-radius: 8px; overflow: hidden; }}
+  .goal-fill {{ height: 100%; background: linear-gradient(90deg, #e94560, #ff6b8a); border-radius: 8px; transition: width 0.5s ease; }}
+  .goal-info {{ display: flex; justify-content: space-between; font-size: 12px; color: #888; }}
+  .goal-info .goal-next {{ color: #e94560; font-weight: 600; }}
+  .goal-info .goal-num {{ color: #ccc; font-variant-numeric: tabular-nums; }}
+  .preview-banner {{ background: #e94560; color: #fff; text-align: center; padding: 10px 20px; font-size: 13px; font-weight: 600; }}
+  .footer {{ text-align: center; padding: 18px 20px; background: #08080f; color: #444; font-size: 12px; border-top: 1px solid #12121e; }}
+  .footer a {{ color: #e94560; text-decoration: none; }}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="preview-banner">LIVE PREVIEW &middot; Fetched {ts_str}</div>
+  <div class="header">
+    {logo_html}
+    <h1>{display_name}</h1>
+    <div class="sub">
+      <span>Clan ID: {clan_id}</span>
+      <span>&middot;</span>
+      <span>{member_count} members</span>
+    </div>
+  </div>
+  {stats_html}
+  {goal_html}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>#</th><th>Name</th><th>Total Reps</th><th>1/2 Hour</th><th>Hourly</th><th>Daily</th></tr></thead>
+    <tbody>{table_rows}</tbody>
+  </table>
+  </div>
+  <div class="footer">
+    Preview generated from live API data.<br>
+    Once deployed, the site auto-updates every 30 minutes.
+  </div>
+</div>
+</body>
+</html>"""
+
+    tmp = tempfile.mkdtemp(prefix="nr-preview-")
+    preview_path = Path(tmp) / "preview.html"
+    preview_path.write_text(preview_html, encoding="utf-8")
+    return preview_path, tmp
+
+
+def do_dry_run_preview(clan_id, display_name, logo_path, favicon_path):
+    print(f"\n  {dry_prefix()}Generating live preview...")
+    preview_path, tmp_dir = generate_preview(clan_id, display_name, logo_path, favicon_path)
+    print(f"  Preview saved to: {preview_path}")
+    print()
+    if prompt_yn("Open preview in browser", default="Y"):
+        webbrowser.open(f"file://{preview_path}")
+    print()
+    print("  Review the preview above. When you're ready:")
+    keep = prompt_yn("  Keep preview (for comparison after real deploy)", default="N")
+    if keep:
+        dest = PARENT_DIR / f"preview-{slugify(display_name)}.html"
+        PARENT_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(preview_path, dest)
+        print(f"  Saved preview to: {dest}")
+    else:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        print(f"  Preview cleaned up.")
+    print()
+
+
 def main():
     global GITHUB_USER, DRY_RUN
 
@@ -326,6 +572,13 @@ def main():
 
     # Execute
     pfx = dry_prefix()
+
+    # Dry-run: generate live preview, then skip gh/git operations
+    if DRY_RUN:
+        do_dry_run_preview(clan_id, display_name, logo_path, favicon_path)
+        print(f"  {pfx}Dry-run complete. No repos or files were created.")
+        return
+
     PARENT_DIR.mkdir(parents=True, exist_ok=True)
 
     if not create_repo(repo_name, visibility, create_desc):
@@ -387,11 +640,9 @@ def main():
 
     if prompt_yn("Open site in browser", default="Y"):
         site = f"https://{GITHUB_USER}.github.io/{repo_name}/"
-        import webbrowser
         webbrowser.open(site)
 
-    if not DRY_RUN:
-        os.chdir(str(PARENT_DIR))
+    os.chdir(str(PARENT_DIR))
 
 
 if __name__ == "__main__":
