@@ -527,128 +527,132 @@ def save_html(data, prev_data, prev_timestamp, hourly_diffs, hourly_ts, now, all
     script_html = ""
     if season_info:
         goal_tiers_json = json.dumps(GOAL_TIERS)
-        script_html = f"""<script>
-(function() {{
-  var end = new Date(\"""" + season_end_iso + """\").getTime();
-  function tick() {{
+        avg_daily_val = str(stats['avg_daily']) if stats and 'avg_daily' in stats else '0'
+        hourly_cache_json = json.dumps(hourly_cache if hourly_cache else {})
+        cache_30m_json = json.dumps(cache_30m["members"] if cache_30m and "members" in cache_30m else {})
+        clan_id_str = str(CLAN_ID)
+        script_html = """<script>
+(function() {
+  var end = new Date("__SEASON_END__").getTime();
+  function tick() {
     var diff = end - new Date().getTime();
-    if (diff <= 0) {{ document.getElementById("timer-d").textContent = "0"; document.getElementById("timer-h").textContent = "00"; document.getElementById("timer-m").textContent = "00"; document.getElementById("timer-s").textContent = "00"; return; }}
+    if (diff <= 0) { document.getElementById("timer-d").textContent = "0"; document.getElementById("timer-h").textContent = "00"; document.getElementById("timer-m").textContent = "00"; document.getElementById("timer-s").textContent = "00"; return; }
     document.getElementById("timer-d").textContent = Math.floor(diff / 86400000);
     document.getElementById("timer-h").textContent = String(Math.floor((diff % 86400000) / 3600000)).padStart(2,"0");
     document.getElementById("timer-m").textContent = String(Math.floor((diff % 3600000) / 60000)).padStart(2,"0");
     document.getElementById("timer-s").textContent = String(Math.floor((diff % 60000) / 1000)).padStart(2,"0");
-  }}
+  }
   tick();
   setInterval(tick, 1000);
-}})();
-window.__goalTiers = """ + goal_tiers_json + """;
-window.__avgDaily = """ + (str(stats['avg_daily']) if stats and 'avg_daily' in stats else '0') + """;
-window.__seasonEnd = \"""" + season_end_iso + """\";
-window.__hourlyCache = """ + json.dumps(hourly_cache if hourly_cache else {}) + """;
-window.__30mCache = """ + json.dumps(cache_30m["members"] if cache_30m and "members" in cache_30m else {}) + """;
-(function() {{
+})();
+window.__goalTiers = __GOAL_TIERS__;
+window.__avgDaily = __AVG_DAILY__;
+window.__seasonEnd = "__SEASON_END__";
+window.__hourlyCache = __HOURLY_CACHE__;
+window.__30mCache = __30M_CACHE__;
+(function() {
   var tbody = document.querySelector("tbody");
   window.__originalRows = tbody.innerHTML;
   window.__defaultRows = tbody.innerHTML;
   var sortCol = -1, sortDir = 0;
   var ths = document.querySelectorAll("th");
-  function applySort() {{
-    if (sortDir === 0) {{ tbody.innerHTML = window.__originalRows; for (var a = 0; a < ths.length; a++) ths[a].querySelector(".sort-arrow").textContent = ""; if (window.__refreshData) window.__refreshData(); var se = document.getElementById("search-input"); if(se&&se.value){{var q=se.value.toLowerCase(),rr=tbody.querySelectorAll("tr");for(var ri=0;ri<rr.length;ri++)rr[ri].style.display=rr[ri].cells[1].textContent.trim().toLowerCase().indexOf(q)>=0?"":"none";}} return; }}
+  function applySort() {
+    if (sortDir === 0) { tbody.innerHTML = window.__originalRows; for (var a = 0; a < ths.length; a++) ths[a].querySelector(".sort-arrow").textContent = ""; if (window.__refreshData) window.__refreshData(); var se = document.getElementById("search-input"); if(se&&se.value){var q=se.value.toLowerCase(),rr=tbody.querySelectorAll("tr");for(var ri=0;ri<rr.length;ri++)rr[ri].style.display=rr[ri].cells[1].textContent.trim().toLowerCase().indexOf(q)>=0?"":"none";} return; }
     for (var a = 0; a < ths.length; a++) ths[a].querySelector(".sort-arrow").textContent = "";
     ths[sortCol].querySelector(".sort-arrow").textContent = sortDir === 1 ? "\\u25B2" : "\\u25BC";
     var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
-    rows.sort(function(a, b) {{
+    rows.sort(function(a, b) {
       var va = a.cells[sortCol].textContent.trim(), vb = b.cells[sortCol].textContent.trim();
       if (sortCol === 1) return sortDir === 1 ? va.localeCompare(vb) : vb.localeCompare(va);
       var na = parseFloat(va) || -1/0, nb = parseFloat(vb) || -1/0;
       return sortDir === 1 ? na - nb : nb - na;
-    }});
+    });
     for (var r = 0; r < rows.length; r++) tbody.appendChild(rows[r]);
     var sr = tbody.querySelectorAll("tr");
     for (var ri = 0; ri < sr.length; ri++) sr[ri].cells[0].textContent = ri + 1;
-  }}
-  window.__resetSort = function() {{ sortCol = -1; sortDir = 0; applySort(); }};
-  for (var i = 0; i < ths.length; i++) (function(col) {{
-    ths[col].addEventListener("click", function() {{
-      if (sortCol !== col) {{ sortCol = col; sortDir = 1; }}
-      else {{ sortDir = (sortDir + 1) % 3; }}
+  }
+  window.__resetSort = function() { sortCol = -1; sortDir = 0; applySort(); };
+  for (var i = 0; i < ths.length; i++) (function(col) {
+    ths[col].addEventListener("click", function() {
+      if (sortCol !== col) { sortCol = col; sortDir = 1; }
+      else { sortDir = (sortDir + 1) % 3; }
       applySort();
-      localStorage.setItem("nr_sort", JSON.stringify({{col: sortCol, dir: sortDir}}));
-    }});
-  }})(i);
-  try {{ var _s = JSON.parse(localStorage.getItem("nr_sort")); if (_s && _s.dir > 0) {{ sortCol = _s.col; sortDir = _s.dir; applySort(); }} }} catch(e) {{}}
-}})();
-(function() {{
-  var API = "https://playninjarift.com/api/detail_clan_website.php?clan_id=""" + str(CLAN_ID) + """", RK = "https://playninjarift.com/api/clan_ranking_website.php";
+      localStorage.setItem("nr_sort", JSON.stringify({col: sortCol, dir: sortDir}));
+    });
+  })(i);
+  try { var _s = JSON.parse(localStorage.getItem("nr_sort")); if (_s && _s.dir > 0) { sortCol = _s.col; sortDir = _s.dir; applySort(); } } catch(e) {}
+})();
+(function() {
+  var API = "https://playninjarift.com/api/detail_clan_website.php?clan_id=__CLAN_ID__", RK = "https://playninjarift.com/api/clan_ranking_website.php";
   var tb = document.querySelector("tbody"), names = [], rws = tb.querySelectorAll("tr");
   for (var i = 0; i < rws.length; i++) names.push(rws[i].cells[1].textContent.trim());
   var autoSeconds = 60, autoEl = document.getElementById("auto-seconds"), searchEl = document.getElementById("search-input"), dotEl = document.getElementById("status-dot"), statusEl = document.getElementById("status-text");
-  if (window.__hourlyCache && Object.keys(window.__hourlyCache).length > 0) {{ var _ts = ts(), _m = String(new Date().getMinutes()), _b = _m <= "1" ? "01" : (_m >= "31" && _m <= "32" ? "31" : _m); localStorage.setItem("nr_1h", JSON.stringify({{b: _b, ts: _ts, rs: window.__hourlyCache}})); }}
-  if (window.__30mCache && Object.keys(window.__30mCache).length > 0) {{ var _b30 = (new Date().getMinutes() <= 1 ? "01" : "31"); localStorage.setItem("nr_30m", JSON.stringify({{b: _b30, ts: _ts, rs: window.__30mCache}})); }}
-  function pad(n) {{ return n < 10 ? "0"+n : ""+n; }}
-  function ts() {{ var d = new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds()); }}
-  function fj(u) {{ return fetch(u,{{headers:{{"Accept":"application/json"}}}}).then(function(r){{return r.json();}}).catch(function(){{return null;}}); }}
-  function dh(v) {{ return v > 0 ? '<span class="up">+'+v+"</span>" : v <= 0 ? '<span class="down">'+v+"</span>" : '<span class="na">N/A</span>'; }}
-  function blk30(m) {{ return m <= 1 ? "01" : (m >= 31 && m <= 32 ? "31" : null); }}
-  function blk1h(m) {{ return m <= 1 ? "01" : null; }}
-  function upd(d, rk) {{
+  if (window.__hourlyCache && Object.keys(window.__hourlyCache).length > 0) { var _ts = ts(), _m = String(new Date().getMinutes()), _b = _m <= "1" ? "01" : (_m >= "31" && _m <= "32" ? "31" : _m); localStorage.setItem("nr_1h", JSON.stringify({b: _b, ts: _ts, rs: window.__hourlyCache})); }
+  if (window.__30mCache && Object.keys(window.__30mCache).length > 0) { var _b30 = (new Date().getMinutes() <= 1 ? "01" : "31"); localStorage.setItem("nr_30m", JSON.stringify({b: _b30, ts: _ts, rs: window.__30mCache})); }
+  function pad(n) { return n < 10 ? "0"+n : ""+n; }
+  function ts() { var d = new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds()); }
+  function fj(u) { return fetch(u,{headers:{"Accept":"application/json"}}).then(function(r){return r.json();}).catch(function(){return null;}); }
+  function dh(v) { return v > 0 ? '<span class="up">+'+v+"</span>" : v <= 0 ? '<span class="down">'+v+"</span>" : '<span class="na">N/A</span>'; }
+  function blk30(m) { return m <= 1 ? "01" : (m >= 31 && m <= 32 ? "31" : null); }
+  function blk1h(m) { return m <= 1 ? "01" : null; }
+  function upd(d, rk) {
     autoSeconds = 60;
     var clan = null;
-    if (rk) {{
-      if (Array.isArray(rk)) {{
-        for (var ci = 0; ci < rk.length; ci++) {{
-          if (rk[ci].clan_id === """ + str(CLAN_ID) + """) {{ clan = rk[ci]; break; }}
-        }}
-      }} else {{ clan = rk; }}
-    }}
+    if (rk) {
+      if (Array.isArray(rk)) {
+        for (var ci = 0; ci < rk.length; ci++) {
+          if (rk[ci].clan_id === __CLAN_ID__) { clan = rk[ci]; break; }
+        }
+      } else { clan = rk; }
+    }
     var n = new Date(), nm = n.getMinutes(), ns = ts();
-    var lm = {{}}; for (var i = 0; i < d.length; i++) lm[i < names.length ? names[i] : d[i].character_name] = d[i].member_reputation;
-    var n2r = {{}}, a = tb.querySelectorAll("tr"); for (var i = 0; i < a.length; i++) n2r[a[i].cells[1].textContent.trim()] = a[i];
-    var c30 = null, c1h = null; try {{ c30 = JSON.parse(localStorage.getItem("nr_30m")); c1h = JSON.parse(localStorage.getItem("nr_1h")); }} catch(e) {{}}
-    if (!c1h && window.__hourlyCache) c1h = {{rs: window.__hourlyCache, ts: ""}};
-    for (var i = 0; i < names.length; i++) {{
+    var lm = {}; for (var i = 0; i < d.length; i++) lm[i < names.length ? names[i] : d[i].character_name] = d[i].member_reputation;
+    var n2r = {}, a = tb.querySelectorAll("tr"); for (var i = 0; i < a.length; i++) n2r[a[i].cells[1].textContent.trim()] = a[i];
+    var c30 = null, c1h = null; try { c30 = JSON.parse(localStorage.getItem("nr_30m")); c1h = JSON.parse(localStorage.getItem("nr_1h")); } catch(e) {}
+    if (!c1h && window.__hourlyCache) c1h = {rs: window.__hourlyCache, ts: ""};
+    for (var i = 0; i < names.length; i++) {
       var name = names[i], rep = lm[name]; if (rep === undefined) continue;
       var row = n2r[name]; if (!row) continue;
       var cel = row.cells;
       cel[2].textContent = rep;
       if (c30 && c30.rs && c30.rs[name] !== undefined) cel[3].innerHTML = dh(rep - c30.rs[name]);
       if (c1h && c1h.rs && c1h.rs[name] !== undefined) cel[4].innerHTML = dh(rep - c1h.rs[name]);
-    }}
-    for (var _n in lm) {{
-      if (names.indexOf(_n) === -1) {{
+    }
+    for (var _n in lm) {
+      if (names.indexOf(_n) === -1) {
         names.push(_n);
         var tr = document.createElement("tr");
         tr.className = "new-row";
         tr.innerHTML = '<td class="num"></td><td>' + _n + '</td><td class="num">' + lm[_n] + '</td><td class="num"><span class="na">N/A</span></td><td class="num"><span class="na">N/A</span></td><td class="num"><span class="na">N/A</span></td>';
         tb.appendChild(tr);
         if (searchEl && searchEl.value && _n.toLowerCase().indexOf(searchEl.value.toLowerCase()) === -1) tr.style.display = "none";
-      }}
-    }}
-    a = tb.querySelectorAll("tr"); n2r = {{}};
+      }
+    }
+    a = tb.querySelectorAll("tr"); n2r = {};
     for (var i = 0; i < a.length; i++) n2r[a[i].cells[1].textContent.trim()] = a[i];
-    for (var i = 0; i < names.length; i++) {{
+    for (var i = 0; i < names.length; i++) {
       var row = n2r[names[i]];
       if (row && lm[names[i]] === undefined) row.className = "left-row";
-    }}
-    if (clan) {{
+    }
+    if (clan) {
       var te = document.getElementById("today-gain");
       if (te && clan.clan_day_points !== undefined) te.textContent = "+"+Number(clan.clan_day_points).toLocaleString();
       var sv = document.querySelectorAll(".stats-col .stat-val");
       if (sv.length >= 2 && clan.clan_reputation !== undefined) sv[1].textContent = Number(clan.clan_reputation).toLocaleString();
-    }}
+    }
     var ft = document.querySelector(".footer");
     var st = document.getElementById("snapshot-ts"); if (st) st.textContent = ns;
-    var rs = {{}}; for (var i = 0; i < d.length; i++) rs[d[i].character_name] = d[i].member_reputation;
+    var rs = {}; for (var i = 0; i < d.length; i++) rs[d[i].character_name] = d[i].member_reputation;
     var b30 = blk30(nm), b1h = blk1h(nm);
-    if (b30 && (!c30 || c30.b !== b30)) localStorage.setItem("nr_30m", JSON.stringify({{b: b30, ts: ns, rs: rs}}));
-    if (b1h && (!c1h || c1h.b !== b1h)) localStorage.setItem("nr_1h", JSON.stringify({{b: b1h, ts: ns, rs: rs}}));
+    if (b30 && (!c30 || c30.b !== b30)) localStorage.setItem("nr_30m", JSON.stringify({b: b30, ts: ns, rs: rs}));
+    if (b1h && (!c1h || c1h.b !== b1h)) localStorage.setItem("nr_1h", JSON.stringify({b: b1h, ts: ns, rs: rs}));
     window.__defaultRows = tb.innerHTML;
     var sr = tb.querySelectorAll("tr");
     for (var ri = 0; ri < sr.length; ri++) sr[ri].cells[0].textContent = ri + 1;
-    if (clan && clan.clan_reputation !== undefined) {{
+    if (clan && clan.clan_reputation !== undefined) {
       var rep = Number(clan.clan_reputation), prev = 0, tiers = window.__goalTiers;
-      for (var ti = 0; ti < tiers.length; ti++) {{
-        if (rep < tiers[ti][0]) {{
+      for (var ti = 0; ti < tiers.length; ti++) {
+        if (rep < tiers[ti][0]) {
           var pct = ((rep - prev) / (tiers[ti][0] - prev)) * 100;
           var fel = document.querySelector(".goal-fill");
           var nel = document.querySelector(".goal-info .goal-num");
@@ -657,88 +661,88 @@ window.__30mCache = """ + json.dumps(cache_30m["members"] if cache_30m and "memb
           if (nel) nel.textContent = rep.toLocaleString() + " / " + tiers[ti][0].toLocaleString();
           if (nel2) nel2.textContent = tiers[ti][1];
           break;
-        }}
+        }
         prev = tiers[ti][0];
-      }}
-    }}
-    if (clan && window.__avgDaily > 0 && window.__seasonEnd) {{
+      }
+    }
+    if (clan && window.__avgDaily > 0 && window.__seasonEnd) {
       var seEnd = new Date(window.__seasonEnd).getTime(), nowMs = new Date().getTime();
       var daysLeft = Math.ceil((seEnd - nowMs) / 86400000);
       if (daysLeft < 0) daysLeft = 0;
       var proj = Number(clan.clan_reputation);
       var cur = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1, 0, 0, 0, 0);
-      while (cur.getTime() <= seEnd) {{
+      while (cur.getTime() <= seEnd) {
         proj += cur.getDay() % 6 === 0 ? window.__avgDaily * 2 : window.__avgDaily;
         cur = new Date(cur.getTime() + 86400000);
-      }}
+      }
       var estEl = document.getElementById("est-season");
       var avgLabel = document.getElementById("avg-label");
       if (estEl) estEl.textContent = Math.round(proj).toLocaleString();
       if (avgLabel) avgLabel.textContent = "Avg/Day · " + daysLeft + "d left";
-    }}
-  }}
-  function refreshData() {{
+    }
+  }
+  function refreshData() {
     if (dotEl) dotEl.className = "status-dot wait";
     if (statusEl) statusEl.textContent = "Loading...";
-    Promise.all([fj(API), fj(RK)]).then(function(r) {{
-      if (r[0] && r[0].members) {{
+    Promise.all([fj(API), fj(RK)]).then(function(r) {
+      if (r[0] && r[0].members) {
         upd(r[0].members, r[1]);
         if (dotEl) dotEl.className = "status-dot ok";
         if (statusEl) statusEl.textContent = "Live";
-      }} else {{
+      } else {
         if (dotEl) dotEl.className = "status-dot err";
         if (statusEl) statusEl.textContent = "Offline";
-      }}
-    }});
-  }}
+      }
+    });
+  }
   window.__refreshData = refreshData;
   refreshData();
   setInterval(refreshData, 60000);
-  setInterval(function(){{if(autoSeconds>0)autoSeconds--;if(autoEl)autoEl.textContent=autoSeconds;}},1000);
-  if(autoEl)autoEl.parentElement.addEventListener("click",function(){{autoSeconds=60;refreshData();}});
-  if(searchEl)searchEl.addEventListener("input",function(){{
+  setInterval(function(){if(autoSeconds>0)autoSeconds--;if(autoEl)autoEl.textContent=autoSeconds;},1000);
+  if(autoEl)autoEl.parentElement.addEventListener("click",function(){autoSeconds=60;refreshData();});
+  if(searchEl)searchEl.addEventListener("input",function(){
     var q = this.value.toLowerCase(), r = tb.querySelectorAll("tr");
     for(var i=0;i<r.length;i++)r[i].style.display=r[i].cells[1].textContent.trim().toLowerCase().indexOf(q)>=0?"":"none";
-  }});
-  tb.addEventListener("click", function(e) {{
+  });
+  tb.addEventListener("click", function(e) {
     var cell = e.target;
     while (cell && cell.tagName !== "TD") cell = cell.parentNode;
     if (!cell || cell.cellIndex !== 1) return;
     var name = cell.textContent.trim();
-    navigator.clipboard.writeText(name).then(function() {{
+    navigator.clipboard.writeText(name).then(function() {
       var toast = document.createElement("span");
       toast.className = "copied-toast";
       toast.textContent = "Copied!";
       toast.style.opacity = "1";
       cell.style.position = "relative";
       cell.appendChild(toast);
-      setTimeout(function() {{ toast.style.opacity = "0"; setTimeout(function() {{ toast.remove(); }}, 300); }}, 1500);
-    }}).catch(function() {{}});
-  }});
+      setTimeout(function() { toast.style.opacity = "0"; setTimeout(function() { toast.remove(); }, 300); }, 1500);
+    }).catch(function() {});
+  });
   var resetBtn = document.getElementById("reset-btn");
-  if (resetBtn) resetBtn.addEventListener("click", function() {{
+  if (resetBtn) resetBtn.addEventListener("click", function() {
     localStorage.removeItem("nr_sort");
     if (window.__resetSort) window.__resetSort();
-  }});
-  function csvDownload() {{
+  });
+  function csvDownload() {
     var rows = tb.querySelectorAll("tr"), csv = "Rank,Name,Total Reps,1/2 Hour,Hourly,Daily\\n";
-    for (var i = 0; i < rows.length; i++) {{
+    for (var i = 0; i < rows.length; i++) {
       var cells = rows[i].cells, vals = [];
-      for (var j = 0; j < cells.length; j++) {{
+      for (var j = 0; j < cells.length; j++) {
         var v = cells[j].textContent.trim().replace(/"/g, '""');
         vals.push('"' + v + '"');
-      }}
+      }
       csv += vals.join(",") + "\\n";
-    }}
-    var blob = new Blob([csv], {{type: "text/csv;charset=utf-8"}});
+    }
+    var blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url; a.download = "reps.csv"; a.click();
     URL.revokeObjectURL(url);
-  }}
+  }
   var csvLink = document.getElementById("csv-link");
   if (csvLink) csvLink.addEventListener("click", csvDownload);
-  function updateAgo() {{
+  function updateAgo() {
     var st = document.getElementById("snapshot-ts");
     var ua = document.getElementById("updated-ago");
     if (!st || !ua) return;
@@ -749,11 +753,19 @@ window.__30mCache = """ + json.dumps(cache_30m["members"] if cache_30m and "memb
     var now = new Date().getTime();
     var diff = Math.floor((now - snap) / 60000);
     ua.textContent = "Updated " + (diff < 1 ? "just now" : diff + "m ago");
-  }}
+  }
   updateAgo();
   setInterval(updateAgo, 30000);
-}})();
+})();
 </script>"""
+        script_html = (script_html
+            .replace("__SEASON_END__", season_end_iso)
+            .replace("__GOAL_TIERS__", goal_tiers_json)
+            .replace("__AVG_DAILY__", avg_daily_val)
+            .replace("__HOURLY_CACHE__", hourly_cache_json)
+            .replace("__30M_CACHE__", cache_30m_json)
+            .replace("__CLAN_ID__", clan_id_str)
+        )
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
