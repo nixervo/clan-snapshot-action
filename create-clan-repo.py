@@ -12,7 +12,8 @@ import webbrowser
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
-PARENT_DIR = Path.home() / "Desktop" / "Clan Reps"
+REPOS_BASE = Path.home() / "Desktop" / "Clan Reps"
+PARENT_DIR = REPOS_BASE
 SCRIPT_DIR = Path(__file__).parent
 TEMPLATES_DIR = SCRIPT_DIR / "templates"
 API_BASE = "https://playninjarift.com/api"
@@ -733,7 +734,7 @@ def confirm_loop(state):
 
 
 def main():
-    global GITHUB_USER, DRY_RUN
+    global GITHUB_USER, DRY_RUN, PARENT_DIR
 
     DRY_RUN = "--dry-run" in sys.argv
 
@@ -743,6 +744,8 @@ def main():
     if not GITHUB_USER:
         print("  Could not detect GitHub username.")
         sys.exit(1)
+
+    PARENT_DIR = REPOS_BASE / GITHUB_USER
 
     state = {
         "clan_id": None,
