@@ -24,10 +24,13 @@ def gh(*args, capture=True, check=True):
     cmd = ["gh"] + list(args)
     try:
         r = subprocess.run(cmd, capture_output=capture, text=True, check=check)
-        return r.stdout.strip() if capture else None
+        out = r.stdout.strip() if capture else None
+        if out:
+            return out
+        return r.stderr.strip() if capture else None
     except subprocess.CalledProcessError as e:
         if capture:
-            return ""
+            return e.stdout.strip() if e.stdout else e.stderr.strip() if e.stderr else ""
         raise
     except FileNotFoundError:
         eprint("Error: `gh` CLI not found. Install from https://cli.github.com/")
