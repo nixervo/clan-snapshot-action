@@ -1194,6 +1194,8 @@ def save_snapshot(data):
     except Exception:
         clan_reputation = 0
         today_gain = 0
+    if not clan_reputation and data.get("members"):
+        clan_reputation = sum(m["member_reputation"] for m in data["members"])
 
     changes = load_changes()
     if cache_30m and "order" in cache_30m:
