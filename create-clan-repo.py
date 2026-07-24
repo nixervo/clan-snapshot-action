@@ -242,7 +242,7 @@ def trigger_workflow(name):
     for attempt in range(3):
         try:
             gh("workflow", "run", "clan-snapshot.yml", "--ref", "main",
-               repo=f"{GITHUB_USER}/{name}", capture=False)
+               "--repo", f"{GITHUB_USER}/{name}", capture=False)
             print(f"  Workflow triggered.")
             return
         except Exception as e:

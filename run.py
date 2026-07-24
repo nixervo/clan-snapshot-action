@@ -41,6 +41,8 @@ def init(clan_id, accent_color="#e94560", accent_light="#ff6b8a"):
     global CHANGES_JSON, SEASON_CACHE, API_URL
     global ACCENT_COLOR, ACCENT_LIGHT, ACCENT_R, ACCENT_G, ACCENT_B
     CLAN_ID = clan_id
+    accent_color = accent_color or "#e94560"
+    accent_light = accent_light or "#ff6b8a"
     ACCENT_COLOR = accent_color
     ACCENT_LIGHT = accent_light
     ACCENT_R = int(accent_color[1:3], 16)
