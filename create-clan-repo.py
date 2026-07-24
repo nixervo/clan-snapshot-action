@@ -7,6 +7,7 @@ import urllib.request
 import re
 import shutil
 import tempfile
+import time
 import webbrowser
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -232,17 +233,25 @@ def enable_pages(name):
 
 def trigger_workflow(name):
     pfx = dry_prefix()
+    print(f"  {pfx}Waiting for GitHub to register workflow...")
+    time.sleep(10)
     print(f"  {pfx}Triggering first workflow run...")
     if DRY_RUN:
         print(f"  {pfx}Would run: gh workflow run clan-snapshot.yml --ref main")
         return
-    try:
-        gh("workflow", "run", "clan-snapshot.yml", "--ref", "main",
-           repo=f"{GITHUB_USER}/{name}", capture=False)
-        print(f"  Workflow triggered.")
-    except Exception as e:
-        print(f"  Warning: couldn't trigger workflow ({e})")
-        print(f"  Trigger manually: Actions -> Clan Snapshot -> Run workflow")
+    for attempt in range(3):
+        try:
+            gh("workflow", "run", "clan-snapshot.yml", "--ref", "main",
+               repo=f"{GITHUB_USER}/{name}", capture=False)
+            print(f"  Workflow triggered.")
+            return
+        except Exception as e:
+            if attempt < 2:
+                print(f"  Retrying ({attempt+1}/3)...")
+                time.sleep(5)
+            else:
+                print(f"  Warning: couldn't trigger workflow ({e})")
+                print(f"  Trigger manually: Actions -> Clan Snapshot -> Run workflow")
 
 
 def check_gh_cli():
