@@ -250,17 +250,13 @@ def check_gh_cli():
         subprocess.run(["gh", "--version"], capture_output=True, check=True)
         return True
     except FileNotFoundError:
-        print("  GitHub CLI not found.")
-        if prompt_yn("  Install via winget (Windows 10+)?", default="Y"):
-            print("  Installing GitHub CLI...")
-            r = subprocess.run(["winget", "install", "--id", "GitHub.cli", "--accept-source-agreement"])
-            if r.returncode != 0:
-                print("  Installation failed. Download from https://cli.github.com/")
-                sys.exit(1)
-            print("  GitHub CLI installed.")
-            return True
-        print("  Download from https://cli.github.com/")
-        sys.exit(1)
+        print("  Installing GitHub CLI via winget...")
+        r = subprocess.run(["winget", "install", "--id", "GitHub.cli", "--accept-source-agreement"])
+        if r.returncode != 0:
+            print("  Installation failed. Download from https://cli.github.com/")
+            sys.exit(1)
+        print("  GitHub CLI installed.")
+        return True
 
 
 def check_gh_auth():
@@ -269,17 +265,13 @@ def check_gh_auth():
     if r.returncode == 0:
         GITHUB_USER = detect_github_user()
         return True
-    print("  Not logged in to GitHub.")
-    if prompt_yn("  Open browser to log in now?", default="Y"):
-        subprocess.run(["gh", "auth", "login", "--web"])
-        r2 = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
-        if r2.returncode == 0:
-            GITHUB_USER = detect_github_user()
-            return True
-        print("  Login failed.")
-        sys.exit(1)
-    print("  Run `gh auth login` later, then run this script again.")
-    print("  Download from https://cli.github.com/")
+    print("  Opening browser to log in to GitHub...")
+    subprocess.run(["gh", "auth", "login", "--web"])
+    r2 = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+    if r2.returncode == 0:
+        GITHUB_USER = detect_github_user()
+        return True
+    print("  Login failed. Run `gh auth login --web` manually.")
     sys.exit(1)
 
 
@@ -623,12 +615,9 @@ def main():
             try:
                 from colorthief import ColorThief
             except ImportError:
-                print("     colorthief not found.")
-                if prompt_yn("     Install now?", default="Y"):
-                    subprocess.run([sys.executable, "-m", "pip", "install", "colorthief"])
-                    from colorthief import ColorThief
-                else:
-                    continue
+                print("     Installing colorthief...")
+                subprocess.run([sys.executable, "-m", "pip", "install", "colorthief"])
+                from colorthief import ColorThief
             ct = ColorThief(str(logo_path))
             pal = ct.get_palette(color_count=2, quality=10)
             accent_color = "#{:02X}{:02X}{:02X}".format(*pal[0])
