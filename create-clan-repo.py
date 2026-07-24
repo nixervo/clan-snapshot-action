@@ -82,9 +82,14 @@ def prompt_yn(question, default="Y"):
     return raw.startswith("y")
 
 
-def prompt_file(question):
-    raw = input(f"  {question}: ").strip()
+def prompt_file(question, default=None):
+    suffix = f" [{default}]" if default else ""
+    raw = input(f"  {question}{suffix}: ").strip()
     if not raw:
+        if default:
+            return default
+        return None
+    if raw in ("-", "clear", "none"):
         return None
     raw = raw.strip('"').strip("'")
     p = Path(raw)
@@ -536,79 +541,80 @@ def do_dry_run_preview(clan_id, display_name, logo_path, favicon_path, accent_co
     print()
 
 
-def main():
-    global GITHUB_USER, DRY_RUN
-
-    DRY_RUN = "--dry-run" in sys.argv
-
-    print_header()
-    check_gh_cli()
-    check_gh_auth()
-    if not GITHUB_USER:
-        print("  Could not detect GitHub username.")
-        sys.exit(1)
-
-    # Step 1: Clan ID
-    print("  1. Clan Information")
-    clan_id = None
-    clan_info = None
-    while clan_info is None:
-        raw = prompt("Clan ID (e.g. 2527)")
+def input_clan(state):
+    print("\n  1. Clan Information")
+    clan_info = state.get("clan_info")
+    while True:
+        raw = prompt("Clan ID (e.g. 2527)", default=str(state["clan_id"]) if state["clan_id"] else None)
         try:
             clan_id = int(raw)
             clan_info = fetch_clan_info(clan_id)
             if clan_info:
                 print(f"     Found: {clan_info['name']} ({clan_info['members']} members)")
+                state["clan_id"] = clan_id
+                state["clan_info"] = clan_info
+                return
             else:
                 print(f"     Clan {clan_id} not found. Check the ID and try again.")
         except ValueError:
             print("     Enter a numeric clan ID.")
 
-    # Step 2: Repo details
-    print("\n  2. Repository")
-    parts = re.split(r'[^a-zA-Z0-9]+', clan_info["name"])
-    default_repo = ''.join(p[:1].upper() + p[1:] for p in parts if p) + "-Reps"
-    repo_name = prompt("Repo name", default=default_repo,
-                       validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
-    display_name = prompt("Display name (for HTML title)", default=clan_info["name"])
-    visibility = "public"
-    if not prompt_yn("Public repo", default="Y"):
-        visibility = "private"
-    if not DRY_RUN:
-        DRY_RUN = prompt_yn("Dry-run mode (preview only, no changes)", default="N")
-    create_desc = f"NinjaRift clan {clan_id} ({clan_info['name']}) reputation snapshots"
 
-    # Step 3: Logo / Favicon
+def input_repo(state):
+    print("\n  2. Repository")
+    clan_info = state["clan_info"]
+    if state["repo_name"]:
+        repo_name = prompt("Repo name", default=state["repo_name"],
+                           validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
+    else:
+        parts = re.split(r'[^a-zA-Z0-9]+', clan_info["name"])
+        default_repo = ''.join(p[:1].upper() + p[1:] for p in parts if p) + "-Reps"
+        repo_name = prompt("Repo name", default=default_repo,
+                           validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
+    display_name = prompt("Display name (for HTML title)", default=state["display_name"] or clan_info["name"])
+    visibility = "private"
+    if prompt_yn("Public repo", default="Y" if state.get("visibility") == "public" else "N"):
+        visibility = "public"
+    if not state["dry_run"]:
+        state["dry_run"] = not prompt_yn("Dry-run mode (preview only, no changes)", default="N" if state["dry_run"] else "N")
+    state["repo_name"] = repo_name
+    state["display_name"] = display_name
+    state["visibility"] = visibility
+
+
+def input_media(state):
     print("\n  3. Media (optional)")
-    logo_path = None
     while True:
-        p = prompt_file("Logo image (drag file here or Enter to skip)")
+        p = prompt_file("Logo image (drag file here or Enter to skip)", default=state.get("logo_path"))
         if p is None:
+            state["logo_path"] = None
             break
         ext = p.suffix.lower()
         if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
-            logo_path = p
+            state["logo_path"] = p
             break
         print(f"  Unsupported format '{ext}'. Use PNG, JPG, GIF, or WebP.")
-    favicon_path = None
     while True:
-        p = prompt_file("Favicon icon (drag file here or Enter to skip)")
+        p = prompt_file("Favicon icon (drag file here or Enter to skip)", default=state.get("favicon_path"))
         if p is None:
+            state["favicon_path"] = None
             break
         ext = p.suffix.lower()
         if ext in (".ico", ".png"):
-            favicon_path = p
+            state["favicon_path"] = p
             break
         print(f"  Unsupported format '{ext}'. Use ICO or PNG.")
 
-    # Step 3.5: Color Theme
-    print("\n  3. Color Theme")
-    accent_color = "#999999"
-    accent_light = "#ff6b8a"
+
+def input_colors(state):
+    print("\n  4. Color Theme")
+    accent_color = state.get("accent_color", "#999999")
+    accent_light = state.get("accent_light", "#ff6b8a")
+    logo_path = state.get("logo_path")
     theme_choice = None
     while theme_choice is None:
         raw = input("     Choose colors:\n"
-                    "       1) Default (light pink + white)\n"
+                    "       1) Default (gray + light pink)\n"
                     + ("       2) From logo\n" if logo_path else "       2) From logo  [disabled — no logo selected]\n")
                     + "       3) Custom hex\n"
                     "     Choice [1]: ").strip()
@@ -636,13 +642,17 @@ def main():
             theme_choice = raw
         elif raw == "3":
             while True:
-                ac = input("     Accent color (hex, e.g. #999999): ").strip()
+                ac = input(f"     Accent color (hex, e.g. {accent_color}): ").strip()
+                if not ac:
+                    ac = accent_color
                 if re.match(r"^#[0-9A-Fa-f]{6}$", ac):
                     accent_color = ac.upper()
                     break
                 print("     Invalid hex. Use format #RRGGBB.")
             while True:
-                al = input("     Light accent color (hex, e.g. #FFFFFF): ").strip()
+                al = input(f"     Light accent color (hex, e.g. {accent_light}): ").strip()
+                if not al:
+                    al = accent_light
                 if re.match(r"^#[0-9A-Fa-f]{6}$", al):
                     accent_light = al.upper()
                     break
@@ -650,25 +660,126 @@ def main():
             theme_choice = raw
         else:
             print("     Enter 1, 2, or 3.")
+    state["accent_color"] = accent_color
+    state["accent_light"] = accent_light
 
-    # Step 3.6: Beta channel
-    use_beta = prompt_yn("  Use beta action (receives updates immediately)", default="N")
-    action_ref = "@beta" if use_beta else "@v1"
 
-    # Step 4: Confirm
-    print(f"\n  4. Confirm")
-    print(f"     GitHub user:    {GITHUB_USER}")
-    print(f"     Repo:           {GITHUB_USER}/{repo_name} ({visibility})")
-    print(f"     Clan ID:        {clan_id} ({clan_info['name']} \u00b7 {clan_info['members']} members)")
-    print(f"     Logo:           {logo_path.name + ' (' + str(logo_path.stat().st_size // 1024) + ' KB)' if logo_path else '(none)'}")
-    print(f"     Favicon:        {favicon_path.name + ' (' + str(favicon_path.stat().st_size // 1024) + ' KB)' if favicon_path else '(none)'}")
-    print(f"     Accent:         {accent_color}")
-    print(f"     Accent light:   {accent_light}")
-    print(f"     Action ref:     {action_ref}")
-    print(f"     Dry-run mode:   {'Yes' if DRY_RUN else 'No'}")
-    if not prompt_yn("Proceed", default="Y"):
+def input_beta(state):
+    print("\n  5. Action Channel")
+    use_beta = prompt_yn("  Use beta action (receives updates immediately)",
+                         default="Y" if state.get("action_ref") == "@beta" else "N")
+    state["action_ref"] = "@beta" if use_beta else "@v1"
+
+
+def show_summary(state):
+    pfx = dry_prefix()
+    print()
+    print(f"  {pfx}Confirm")
+    print(f"    1) Clan ID:        {state['clan_id']} ({state['clan_info']['name']} \u00b7 {state['clan_info']['members']} members)")
+    print(f"    2) Repository:     {state['repo_name']} ({state['visibility']})")
+    print(f"    3) Display name:   {state['display_name']}")
+    logo = state.get("logo_path")
+    print(f"    4) Logo:           {logo.name + ' (' + str(logo.stat().st_size // 1024) + ' KB)' if logo else '(none)'}")
+    fav = state.get("favicon_path")
+    print(f"    5) Favicon:        {fav.name + ' (' + str(fav.stat().st_size // 1024) + ' KB)' if fav else '(none)'}")
+    print(f"    6) Accent:         {state['accent_color']}")
+    print(f"    7) Accent light:   {state['accent_light']}")
+    print(f"    8) Action ref:     {state['action_ref']}")
+    print(f"    9) Dry-run:        {'Yes' if state['dry_run'] else 'No'}")
+    print(f"    0) Start over")
+    print()
+
+
+def confirm_loop(state):
+    while True:
+        show_summary(state)
+        choice = input("  Enter # to edit, Y to proceed, N to cancel: ").strip().lower()
+        if choice in ("y", "yes"):
+            return True
+        if choice in ("n", "no"):
+            return False
+        if choice == "1":
+            input_clan(state)
+        elif choice == "2":
+            input_repo(state)
+        elif choice == "3":
+            input_media(state)
+        elif choice in ("4", "6", "7"):
+            input_colors(state)
+        elif choice == "5":
+            input_beta(state)
+        elif choice == "8":
+            input_beta(state)
+        elif choice == "9":
+            state["dry_run"] = not state["dry_run"]
+        elif choice == "0":
+            state["clan_id"] = None
+            state["clan_info"] = None
+            state["repo_name"] = None
+            state["display_name"] = None
+            state["visibility"] = "public"
+            state["logo_path"] = None
+            state["favicon_path"] = None
+            state["accent_color"] = "#999999"
+            state["accent_light"] = "#ff6b8a"
+            state["action_ref"] = "@v1"
+            input_clan(state)
+            input_repo(state)
+            input_media(state)
+            input_colors(state)
+            input_beta(state)
+        else:
+            print("  Invalid choice.")
+
+
+def main():
+    global GITHUB_USER, DRY_RUN
+
+    DRY_RUN = "--dry-run" in sys.argv
+
+    print_header()
+    check_gh_cli()
+    check_gh_auth()
+    if not GITHUB_USER:
+        print("  Could not detect GitHub username.")
+        sys.exit(1)
+
+    state = {
+        "clan_id": None,
+        "clan_info": None,
+        "repo_name": None,
+        "display_name": None,
+        "visibility": "public",
+        "logo_path": None,
+        "favicon_path": None,
+        "accent_color": "#999999",
+        "accent_light": "#ff6b8a",
+        "action_ref": "@v1",
+        "dry_run": DRY_RUN,
+    }
+
+    input_clan(state)
+    input_repo(state)
+    input_media(state)
+    input_colors(state)
+    input_beta(state)
+
+    if not confirm_loop(state):
         print("  Cancelled.")
         sys.exit(0)
+
+    DRY_RUN = state["dry_run"]
+    clan_info = state["clan_info"]
+    clan_id = state["clan_id"]
+    repo_name = state["repo_name"]
+    display_name = state["display_name"]
+    visibility = state["visibility"]
+    logo_path = state["logo_path"]
+    favicon_path = state["favicon_path"]
+    accent_color = state["accent_color"]
+    accent_light = state["accent_light"]
+    action_ref = state["action_ref"]
+    create_desc = f"NinjaRift clan {clan_id} ({clan_info['name']}) reputation snapshots"
 
     # Execute
     pfx = dry_prefix()
