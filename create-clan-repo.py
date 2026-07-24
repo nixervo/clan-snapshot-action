@@ -694,8 +694,6 @@ def main():
         "CLAN_NAME": display_name,
         "GITHUB_USER": GITHUB_USER,
         "REPO_NAME": repo_name,
-        "ACCENT_COLOR": accent_color,
-        "ACCENT_LIGHT": accent_light,
         "ACTION_REF": action_ref,
     }
     print(f"  {pfx}Writing .github/workflows/clan-snapshot.yml...")
@@ -713,6 +711,11 @@ def main():
         repo_path / ".gitignore",
         ".gitignore", subs,
     )
+
+    # Write theme.json (locks accent colors against future action default changes)
+    print(f"  {pfx}Writing theme.json...")
+    theme_json = json.dumps({"accent_color": accent_color, "accent_light": accent_light}, indent=2)
+    write_file(repo_path / "theme.json", theme_json)
 
     # Copy media files
     if logo_path:

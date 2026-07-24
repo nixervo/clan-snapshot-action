@@ -41,8 +41,14 @@ def init(clan_id, accent_color, accent_light):
     global CHANGES_JSON, SEASON_CACHE, API_URL
     global ACCENT_COLOR, ACCENT_LIGHT, ACCENT_R, ACCENT_G, ACCENT_B
     CLAN_ID = clan_id
-    accent_color = accent_color or "#999999"
-    accent_light = accent_light or "#ff6b8a"
+    theme = {}
+    try:
+        with open("theme.json") as f:
+            theme = json.load(f)
+    except Exception:
+        pass
+    accent_color = accent_color or theme.get("accent_color") or "#999999"
+    accent_light = accent_light or theme.get("accent_light") or "#ff6b8a"
     ACCENT_COLOR = accent_color
     ACCENT_LIGHT = accent_light
     ACCENT_R = int(accent_color[1:3], 16)
@@ -1527,8 +1533,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--clan-id", type=int, required=True, help="NinjaRift clan ID")
-    parser.add_argument("--accent-color", default="#999999", help="Accent hex color (default: #999999)")
-    parser.add_argument("--accent-light", default="#ff6b8a", help="Light accent hex color (default: #ff6b8a)")
+    parser.add_argument("--accent-color", default="", help="Accent hex color")
+    parser.add_argument("--accent-light", default="", help="Light accent hex color for gradients")
     args = parser.parse_args()
     init(args.clan_id, args.accent_color, args.accent_light)
     fetch_once()

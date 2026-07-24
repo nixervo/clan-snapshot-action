@@ -7,11 +7,9 @@ inputs:
   accent-color:
     description: 'Accent hex color (e.g., #999999)'
     required: false
-    default: '#999999'
   accent-light:
     description: 'Light accent hex color for gradients (e.g., #ff6b8a)'
     required: false
-    default: '#ff6b8a'
 runs:
   using: 'composite'
   steps:
