@@ -566,7 +566,8 @@ def main():
 
     # Step 2: Repo details
     print("\n  2. Repository")
-    default_repo = slugify(clan_info["name"]) + "-reps"
+    parts = re.split(r'[^a-zA-Z0-9]+', clan_info["name"])
+    default_repo = ''.join(p[:1].upper() + p[1:] for p in parts if p) + "-Reps"
     repo_name = prompt("Repo name", default=default_repo,
                        validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
     display_name = prompt("Display name (for HTML title)", default=clan_info["name"])
