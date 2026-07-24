@@ -641,6 +641,10 @@ def main():
         else:
             print("     Enter 1, 2, or 3.")
 
+    # Step 3.6: Beta channel
+    use_beta = prompt_yn("  Use beta action (receives updates immediately)", default="N")
+    action_ref = "@beta" if use_beta else "@v1"
+
     # Step 4: Confirm
     print(f"\n  4. Confirm")
     print(f"     GitHub user:    {GITHUB_USER}")
@@ -650,6 +654,7 @@ def main():
     print(f"     Favicon:        {favicon_path.name + ' (' + str(favicon_path.stat().st_size // 1024) + ' KB)' if favicon_path else '(none)'}")
     print(f"     Accent:         {accent_color}")
     print(f"     Accent light:   {accent_light}")
+    print(f"     Action ref:     {action_ref}")
     print(f"     Dry-run mode:   {'Yes' if DRY_RUN else 'No'}")
     if not prompt_yn("Proceed", default="Y"):
         print("  Cancelled.")
@@ -682,6 +687,7 @@ def main():
         "REPO_NAME": repo_name,
         "ACCENT_COLOR": accent_color,
         "ACCENT_LIGHT": accent_light,
+        "ACTION_REF": action_ref,
     }
     print(f"  {pfx}Writing .github/workflows/clan-snapshot.yml...")
     write_templated_file(

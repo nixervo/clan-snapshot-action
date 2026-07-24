@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - uses: nixervo/clan-snapshot-action@v1
+      - uses: nixervo/clan-snapshot-action{{ACTION_REF}}
         with:
           clan-id: {{CLAN_ID}}
           accent-color: {{ACCENT_COLOR}}
