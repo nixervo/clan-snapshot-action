@@ -245,6 +245,44 @@ def trigger_workflow(name):
         print(f"  Trigger manually: Actions -> Clan Snapshot -> Run workflow")
 
 
+def check_gh_cli():
+    try:
+        subprocess.run(["gh", "--version"], capture_output=True, check=True)
+        return True
+    except FileNotFoundError:
+        print("  GitHub CLI not found.")
+        if prompt_yn("  Install via winget (Windows 10+)?", default="Y"):
+            print("  Installing GitHub CLI...")
+            r = subprocess.run(["winget", "install", "--id", "GitHub.cli", "--accept-source-agreement"])
+            if r.returncode != 0:
+                print("  Installation failed. Download from https://cli.github.com/")
+                sys.exit(1)
+            print("  GitHub CLI installed.")
+            return True
+        print("  Download from https://cli.github.com/")
+        sys.exit(1)
+
+
+def check_gh_auth():
+    global GITHUB_USER
+    r = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+    if r.returncode == 0:
+        GITHUB_USER = detect_github_user()
+        return True
+    print("  Not logged in to GitHub.")
+    if prompt_yn("  Open browser to log in now?", default="Y"):
+        subprocess.run(["gh", "auth", "login", "--web"])
+        r2 = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+        if r2.returncode == 0:
+            GITHUB_USER = detect_github_user()
+            return True
+        print("  Login failed.")
+        sys.exit(1)
+    print("  Run `gh auth login` later, then run this script again.")
+    print("  Download from https://cli.github.com/")
+    sys.exit(1)
+
+
 def print_header():
     pfx = dry_prefix()
     print()
@@ -503,12 +541,8 @@ def main():
     DRY_RUN = "--dry-run" in sys.argv
 
     print_header()
-
-    if not gh("auth", "status", capture=True, check=False):
-        print("  GitHub CLI not authenticated. Run `gh auth login` first.")
-        sys.exit(1)
-
-    GITHUB_USER = detect_github_user()
+    check_gh_cli()
+    check_gh_auth()
     if not GITHUB_USER:
         print("  Could not detect GitHub username.")
         sys.exit(1)
@@ -588,15 +622,19 @@ def main():
                 continue
             try:
                 from colorthief import ColorThief
-                ct = ColorThief(str(logo_path))
-                pal = ct.get_palette(color_count=2, quality=10)
-                accent_color = "#{:02X}{:02X}{:02X}".format(*pal[0])
-                accent_light = "#{:02X}{:02X}{:02X}".format(*pal[1])
-                print(f"     Extracted: accent={accent_color}, light={accent_light}")
-                theme_choice = raw
             except ImportError:
-                print("     Requires `colorthief`. Install: pip install colorthief")
-                continue
+                print("     colorthief not found.")
+                if prompt_yn("     Install now?", default="Y"):
+                    subprocess.run([sys.executable, "-m", "pip", "install", "colorthief"])
+                    from colorthief import ColorThief
+                else:
+                    continue
+            ct = ColorThief(str(logo_path))
+            pal = ct.get_palette(color_count=2, quality=10)
+            accent_color = "#{:02X}{:02X}{:02X}".format(*pal[0])
+            accent_light = "#{:02X}{:02X}{:02X}".format(*pal[1])
+            print(f"     Extracted: accent={accent_color}, light={accent_light}")
+            theme_choice = raw
         elif raw == "3":
             while True:
                 ac = input("     Accent color (hex, e.g. #999999): ").strip()
