@@ -19,6 +19,11 @@ CACHE_1H = None
 CHANGES_JSON = None
 SEASON_CACHE = None
 API_URL = None
+ACCENT_COLOR = "#FCE8EC"
+ACCENT_LIGHT = "#FFFFFF"
+ACCENT_R = 252
+ACCENT_G = 232
+ACCENT_B = 236
 
 SEASON_API = "https://playninjarift.com/api/refresh_time_website.php"
 RANKING_API = "https://playninjarift.com/api/clan_ranking_website.php"
@@ -31,10 +36,16 @@ GOAL_TIERS = [
 ]
 
 
-def init(clan_id):
+def init(clan_id, accent_color="#FCE8EC", accent_light="#FFFFFF"):
     global CLAN_ID, EXCEL_FILE, HOURLY_CACHE, CACHE_30M, CACHE_1H
     global CHANGES_JSON, SEASON_CACHE, API_URL
+    global ACCENT_COLOR, ACCENT_LIGHT, ACCENT_R, ACCENT_G, ACCENT_B
     CLAN_ID = clan_id
+    ACCENT_COLOR = accent_color
+    ACCENT_LIGHT = accent_light
+    ACCENT_R = int(accent_color[1:3], 16)
+    ACCENT_G = int(accent_color[3:5], 16)
+    ACCENT_B = int(accent_color[5:7], 16)
     EXCEL_FILE = f"clan_{clan_id}.xlsx"
     HOURLY_CACHE = f"_{clan_id}_hourly_cache.json"
     CACHE_30M = f"_{clan_id}_30m_cache.json"
@@ -1101,6 +1112,13 @@ window.__30mCache = """ + json.dumps(cache_30m["members"] if cache_30m and "memb
 </body>
 </html>"""
 
+    html = (html
+        .replace("#e94560", ACCENT_COLOR)
+        .replace("#ff6b8a", ACCENT_LIGHT)
+        .replace("rgba(233, 69, 96,", f"rgba({ACCENT_R}, {ACCENT_G}, {ACCENT_B},")
+        .replace("rgba(233,69,96,", f"rgba({ACCENT_R},{ACCENT_G},{ACCENT_B},")
+    )
+
     index_path = "index.html"
     with open(index_path, "w", encoding="utf-8") as f:
         f.write(html)
@@ -1321,6 +1339,12 @@ def save_daily_history():
   details.season-wrap[open] > summary .arrow { transform: rotate(90deg); }
   .current-badge { font-size: 11px; font-weight: 400; color: #666; background: #222; padding: 1px 8px; border-radius: 8px; }
 </style>"""
+    css = (css
+        .replace("#e94560", ACCENT_COLOR)
+        .replace("#ff6b8a", ACCENT_LIGHT)
+        .replace("rgba(233, 69, 96,", f"rgba({ACCENT_R}, {ACCENT_G}, {ACCENT_B},")
+        .replace("rgba(233,69,96,", f"rgba({ACCENT_R},{ACCENT_G},{ACCENT_B},")
+    )
     daily_pages = []
     for i in range(1, len(sheets_data)):
         prev, curr = sheets_data[i-1], sheets_data[i]
@@ -1392,6 +1416,12 @@ def save_daily_history():
 </div>
 </body>
 </html>"""
+        page_html = (page_html
+            .replace("#e94560", ACCENT_COLOR)
+            .replace("#ff6b8a", ACCENT_LIGHT)
+            .replace("rgba(233, 69, 96,", f"rgba({ACCENT_R}, {ACCENT_G}, {ACCENT_B},")
+            .replace("rgba(233,69,96,", f"rgba({ACCENT_R},{ACCENT_G},{ACCENT_B},")
+        )
         with open(f"history_{date}.html", "w", encoding="utf-8") as f:
             f.write(page_html)
         print(f"[{datetime.now(TARGET_TZ).strftime('%Y-%m-%d %H:%M:%S')}] Saved history_{date}.html")
@@ -1463,6 +1493,12 @@ def save_daily_history():
 </div>
 </body>
 </html>"""
+    index_html = (index_html
+        .replace("#e94560", ACCENT_COLOR)
+        .replace("#ff6b8a", ACCENT_LIGHT)
+        .replace("rgba(233, 69, 96,", f"rgba({ACCENT_R}, {ACCENT_G}, {ACCENT_B},")
+        .replace("rgba(233,69,96,", f"rgba({ACCENT_R},{ACCENT_G},{ACCENT_B},")
+    )
     with open("history.html", "w", encoding="utf-8") as f:
         f.write(index_html)
     print(f"[{datetime.now(TARGET_TZ).strftime('%Y-%m-%d %H:%M:%S')}] Saved history.html")
@@ -1477,6 +1513,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--clan-id", type=int, required=True, help="NinjaRift clan ID")
+    parser.add_argument("--accent-color", default="#FCE8EC", help="Accent hex color (default: #FCE8EC)")
+    parser.add_argument("--accent-light", default="#FFFFFF", help="Light accent hex color (default: #FFFFFF)")
     args = parser.parse_args()
-    init(args.clan_id)
+    init(args.clan_id, args.accent_color, args.accent_light)
     fetch_once()

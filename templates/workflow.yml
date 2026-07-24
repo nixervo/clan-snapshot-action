@@ -19,6 +19,8 @@ jobs:
       - uses: nixervo/clan-snapshot-action@v1
         with:
           clan-id: {{CLAN_ID}}
+          accent-color: {{ACCENT_COLOR}}
+          accent-light: {{ACCENT_LIGHT}}
       - run: |
           git config user.name "clan-snapshot-bot"
           git config user.email "bot@clan-snapshot.local"

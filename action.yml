@@ -4,6 +4,14 @@ inputs:
   clan-id:
     description: 'NinjaRift clan ID (e.g., 2527)'
     required: true
+  accent-color:
+    description: 'Accent hex color (e.g., #FCE8EC)'
+    required: false
+    default: '#FCE8EC'
+  accent-light:
+    description: 'Light accent hex color for gradients (e.g., #FFFFFF)'
+    required: false
+    default: '#FFFFFF'
 runs:
   using: 'composite'
   steps:
@@ -11,7 +19,7 @@ runs:
       run: pip install openpyxl
       shell: bash
     - name: Run snapshot
-      run: python "${{ github.action_path }}/run.py" --clan-id ${{ inputs.clan-id }}
+      run: python "${{ github.action_path }}/run.py" --clan-id ${{ inputs.clan-id }} --accent-color "${{ inputs.accent-color }}" --accent-light "${{ inputs.accent-light }}"
       shell: bash
       env:
         GITHUB_REPOSITORY: ${{ github.repository }}

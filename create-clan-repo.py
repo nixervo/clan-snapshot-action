@@ -304,7 +304,7 @@ def compute_goal_preview(clan_reputation):
     return {"next_tier": next_tier, "progress": min(progress, 100), "total": clan_reputation}
 
 
-def generate_preview(clan_id, display_name, logo_path, favicon_path):
+def generate_preview(clan_id, display_name, logo_path, favicon_path, accent_color="#FCE8EC", accent_light="#FFFFFF"):
     now = datetime.now(TARGET_TZ)
     ts_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -463,15 +463,22 @@ def generate_preview(clan_id, display_name, logo_path, favicon_path):
 </body>
 </html>"""
 
+    accent_r, accent_g, accent_b = int(accent_color[1:3], 16), int(accent_color[3:5], 16), int(accent_color[5:7], 16)
+    preview_html = (preview_html
+        .replace("#e94560", accent_color)
+        .replace("#ff6b8a", accent_light)
+        .replace("rgba(233, 69, 96,", f"rgba({accent_r}, {accent_g}, {accent_b},")
+        .replace("rgba(233,69,96,", f"rgba({accent_r},{accent_g},{accent_b},")
+    )
     tmp = tempfile.mkdtemp(prefix="nr-preview-")
     preview_path = Path(tmp) / "preview.html"
     preview_path.write_text(preview_html, encoding="utf-8")
     return preview_path, tmp
 
 
-def do_dry_run_preview(clan_id, display_name, logo_path, favicon_path):
+def do_dry_run_preview(clan_id, display_name, logo_path, favicon_path, accent_color="#FCE8EC", accent_light="#FFFFFF"):
     print(f"\n  {dry_prefix()}Generating live preview...")
-    preview_path, tmp_dir = generate_preview(clan_id, display_name, logo_path, favicon_path)
+    preview_path, tmp_dir = generate_preview(clan_id, display_name, logo_path, favicon_path, accent_color, accent_light)
     print(f"  Preview saved to: {preview_path}")
     print()
     if prompt_yn("Open preview in browser", default="Y"):
@@ -558,6 +565,55 @@ def main():
             break
         print(f"  Unsupported format '{ext}'. Use ICO or PNG.")
 
+    # Step 3.5: Color Theme
+    print("\n  3. Color Theme")
+    accent_color = "#FCE8EC"
+    accent_light = "#FFFFFF"
+    theme_choice = None
+    while theme_choice is None:
+        raw = input("     Choose colors:\n"
+                    "       1) Default (light pink + white)\n"
+                    + ("       2) From logo\n" if logo_path else "       2) From logo  [disabled — no logo selected]\n")
+                    + "       3) Custom hex\n"
+                    "     Choice [1]: ").strip()
+        if not raw:
+            raw = "1"
+        if raw == "1":
+            accent_color = "#FCE8EC"
+            accent_light = "#FFFFFF"
+            theme_choice = raw
+        elif raw == "2":
+            if not logo_path:
+                print("     No logo selected. Choose option 1 or 3.")
+                continue
+            try:
+                from colorthief import ColorThief
+                ct = ColorThief(str(logo_path))
+                pal = ct.get_palette(color_count=2, quality=10)
+                accent_color = "#{:02X}{:02X}{:02X}".format(*pal[0])
+                accent_light = "#{:02X}{:02X}{:02X}".format(*pal[1])
+                print(f"     Extracted: accent={accent_color}, light={accent_light}")
+                theme_choice = raw
+            except ImportError:
+                print("     Requires `colorthief`. Install: pip install colorthief")
+                continue
+        elif raw == "3":
+            while True:
+                ac = input("     Accent color (hex, e.g. #FCE8EC): ").strip()
+                if re.match(r"^#[0-9A-Fa-f]{6}$", ac):
+                    accent_color = ac.upper()
+                    break
+                print("     Invalid hex. Use format #RRGGBB.")
+            while True:
+                al = input("     Light accent color (hex, e.g. #FFFFFF): ").strip()
+                if re.match(r"^#[0-9A-Fa-f]{6}$", al):
+                    accent_light = al.upper()
+                    break
+                print("     Invalid hex. Use format #RRGGBB.")
+            theme_choice = raw
+        else:
+            print("     Enter 1, 2, or 3.")
+
     # Step 4: Confirm
     print(f"\n  4. Confirm")
     print(f"     GitHub user:    {GITHUB_USER}")
@@ -565,6 +621,8 @@ def main():
     print(f"     Clan ID:        {clan_id} ({clan_info['name']} \u00b7 {clan_info['members']} members)")
     print(f"     Logo:           {logo_path.name + ' (' + str(logo_path.stat().st_size // 1024) + ' KB)' if logo_path else '(none)'}")
     print(f"     Favicon:        {favicon_path.name + ' (' + str(favicon_path.stat().st_size // 1024) + ' KB)' if favicon_path else '(none)'}")
+    print(f"     Accent:         {accent_color}")
+    print(f"     Accent light:   {accent_light}")
     print(f"     Dry-run mode:   {'Yes' if DRY_RUN else 'No'}")
     if not prompt_yn("Proceed", default="Y"):
         print("  Cancelled.")
@@ -575,7 +633,7 @@ def main():
 
     # Dry-run: generate live preview, then skip gh/git operations
     if DRY_RUN:
-        do_dry_run_preview(clan_id, display_name, logo_path, favicon_path)
+        do_dry_run_preview(clan_id, display_name, logo_path, favicon_path, accent_color, accent_light)
         print(f"  {pfx}Dry-run complete. No repos or files were created.")
         return
 
@@ -595,6 +653,8 @@ def main():
         "CLAN_NAME": display_name,
         "GITHUB_USER": GITHUB_USER,
         "REPO_NAME": repo_name,
+        "ACCENT_COLOR": accent_color,
+        "ACCENT_LIGHT": accent_light,
     }
     print(f"  {pfx}Writing .github/workflows/clan-snapshot.yml...")
     write_templated_file(
