@@ -21,3 +21,18 @@ runs:
       shell: bash
       env:
         GITHUB_REPOSITORY: ${{ github.repository }}
+    - name: Commit and push
+      shell: bash
+      run: |
+        git config user.name "clan-snapshot-bot"
+        git config user.email "bot@clan-snapshot.local"
+        git add -A
+        git commit -m "auto: snapshot $(date -u '+%Y-%m-%d %H:%M:%S')" --allow-empty
+        git push
+    - name: Schedule next run
+      shell: bash
+      run: |
+        sleep 1800
+        gh workflow run "Clan Snapshot" --repo ${{ github.repository }}
+      env:
+        GH_TOKEN: ${{ github.token }}
