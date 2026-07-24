@@ -385,7 +385,7 @@ def main():
     # Done
     print_summary(repo_name, clan_info)
 
-    if not DRY_RUN and prompt_yn("Open site in browser", default="Y"):
+    if prompt_yn("Open site in browser", default="Y"):
         site = f"https://{GITHUB_USER}.github.io/{repo_name}/"
         import webbrowser
         webbrowser.open(site)
