@@ -19,7 +19,7 @@ CACHE_1H = None
 CHANGES_JSON = None
 SEASON_CACHE = None
 API_URL = None
-ACCENT_COLOR = "#FCE8EC"
+ACCENT_COLOR = "#999999"
 ACCENT_LIGHT = "#FFFFFF"
 ACCENT_R = 252
 ACCENT_G = 232
@@ -36,7 +36,7 @@ GOAL_TIERS = [
 ]
 
 
-def init(clan_id, accent_color="#FCE8EC", accent_light="#FFFFFF"):
+def init(clan_id, accent_color="#999999", accent_light="#FFFFFF"):
     global CLAN_ID, EXCEL_FILE, HOURLY_CACHE, CACHE_30M, CACHE_1H
     global CHANGES_JSON, SEASON_CACHE, API_URL
     global ACCENT_COLOR, ACCENT_LIGHT, ACCENT_R, ACCENT_G, ACCENT_B
@@ -1513,7 +1513,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--clan-id", type=int, required=True, help="NinjaRift clan ID")
-    parser.add_argument("--accent-color", default="#FCE8EC", help="Accent hex color (default: #FCE8EC)")
+    parser.add_argument("--accent-color", default="#999999", help="Accent hex color (default: #999999)")
     parser.add_argument("--accent-light", default="#FFFFFF", help="Light accent hex color (default: #FFFFFF)")
     args = parser.parse_args()
     init(args.clan_id, args.accent_color, args.accent_light)

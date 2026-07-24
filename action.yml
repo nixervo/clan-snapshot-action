@@ -5,9 +5,9 @@ inputs:
     description: 'NinjaRift clan ID (e.g., 2527)'
     required: true
   accent-color:
-    description: 'Accent hex color (e.g., #FCE8EC)'
+    description: 'Accent hex color (e.g., #999999)'
     required: false
-    default: '#FCE8EC'
+    default: '#999999'
   accent-light:
     description: 'Light accent hex color for gradients (e.g., #FFFFFF)'
     required: false

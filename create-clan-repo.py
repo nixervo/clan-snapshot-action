@@ -304,7 +304,7 @@ def compute_goal_preview(clan_reputation):
     return {"next_tier": next_tier, "progress": min(progress, 100), "total": clan_reputation}
 
 
-def generate_preview(clan_id, display_name, logo_path, favicon_path, accent_color="#FCE8EC", accent_light="#FFFFFF"):
+def generate_preview(clan_id, display_name, logo_path, favicon_path, accent_color="#999999", accent_light="#FFFFFF"):
     now = datetime.now(TARGET_TZ)
     ts_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -476,7 +476,7 @@ def generate_preview(clan_id, display_name, logo_path, favicon_path, accent_colo
     return preview_path, tmp
 
 
-def do_dry_run_preview(clan_id, display_name, logo_path, favicon_path, accent_color="#FCE8EC", accent_light="#FFFFFF"):
+def do_dry_run_preview(clan_id, display_name, logo_path, favicon_path, accent_color="#999999", accent_light="#FFFFFF"):
     print(f"\n  {dry_prefix()}Generating live preview...")
     preview_path, tmp_dir = generate_preview(clan_id, display_name, logo_path, favicon_path, accent_color, accent_light)
     print(f"  Preview saved to: {preview_path}")
@@ -567,7 +567,7 @@ def main():
 
     # Step 3.5: Color Theme
     print("\n  3. Color Theme")
-    accent_color = "#FCE8EC"
+    accent_color = "#999999"
     accent_light = "#FFFFFF"
     theme_choice = None
     while theme_choice is None:
@@ -579,7 +579,7 @@ def main():
         if not raw:
             raw = "1"
         if raw == "1":
-            accent_color = "#FCE8EC"
+            accent_color = "#999999"
             accent_light = "#FFFFFF"
             theme_choice = raw
         elif raw == "2":
@@ -599,7 +599,7 @@ def main():
                 continue
         elif raw == "3":
             while True:
-                ac = input("     Accent color (hex, e.g. #FCE8EC): ").strip()
+                ac = input("     Accent color (hex, e.g. #999999): ").strip()
                 if re.match(r"^#[0-9A-Fa-f]{6}$", ac):
                     accent_color = ac.upper()
                     break
