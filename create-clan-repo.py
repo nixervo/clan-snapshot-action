@@ -33,10 +33,11 @@ def dry_prefix():
     return "[DRY-RUN] " if DRY_RUN else ""
 
 
-def gh(*args, capture=True, check=True):
+def gh(*args, capture=True, check=True, input_data=None):
     cmd = ["gh"] + list(args)
     try:
-        r = subprocess.run(cmd, capture_output=capture, text=True, check=check)
+        r = subprocess.run(cmd, capture_output=capture, text=True, check=check,
+                          input=input_data)
         out = r.stdout.strip() if capture else None
         if out:
             return out
@@ -213,18 +214,17 @@ def enable_pages(name):
     if DRY_RUN:
         print(f"  {pfx}Would POST repos/{GITHUB_USER}/{name}/pages")
         return
+    print(f"  {pfx}Waiting for repo to settle...")
+    time.sleep(5)
+    body = json.dumps({"source": {"branch": "main", "path": "/"}})
     try:
         result = gh("api", f"repos/{GITHUB_USER}/{name}/pages",
-                    "-X", "POST",
-                    "-f", "source.branch=main",
-                    "-f", "source.path=/",
-                    capture=True, check=False)
-        if "already" in result.lower() or not result:
+                    "-X", "POST", "--input", "-",
+                    input_data=body, capture=True, check=False)
+        if result and "already" in result.lower():
             gh("api", f"repos/{GITHUB_USER}/{name}/pages",
-               "-X", "PUT",
-               "-f", "source.branch=main",
-               "-f", "source.path=/",
-               capture=False)
+               "-X", "PUT", "--input", "-",
+               input_data=body, capture=False)
         print(f"  Pages enabled.")
     except Exception as e:
         print(f"  Warning: couldn't enable Pages automatically ({e})")
