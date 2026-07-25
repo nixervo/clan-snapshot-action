@@ -719,12 +719,9 @@ def input_repo(state):
         owner = GITHUB_USER
         repo_name = raw
 
-    exists = False
-    try:
-        gh("repo", "view", f"{owner}/{repo_name}", "--json", "name", capture=True, check=True)
-        exists = True
-    except Exception:
-        pass
+    r = subprocess.run(["gh", "repo", "view", f"{owner}/{repo_name}", "--json", "name"],
+                       capture_output=True, text=True)
+    exists = (r.returncode == 0)
 
     state["update_mode"] = exists
     state["repo_name"] = repo_name
