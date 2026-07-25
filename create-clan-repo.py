@@ -187,6 +187,45 @@ def clone_repo(name):
     return target
 
 
+def clone_or_pull_repo(name, owner, update_mode=False):
+    pfx = dry_prefix()
+    target = PARENT_DIR / name
+    if update_mode and target.exists():
+        print(f"  {pfx}Updating existing local clone at {target}...")
+        os.chdir(target)
+        if DRY_RUN:
+            print(f"  {pfx}Would run: git pull --rebase")
+            return target
+        gh("pull", "--rebase", capture=False)
+        return target
+    if target.exists():
+        print(f"  Directory {target} already exists. Removing...")
+        shutil.rmtree(target)
+    print(f"  {pfx}Cloning {owner}/{name}...")
+    if DRY_RUN:
+        print(f"  {pfx}Would clone to {target}")
+        return target
+    gh("repo", "clone", f"{owner}/{name}", str(target), capture=False)
+    return target
+
+
+def detect_clan_id_from_repo(repo_path):
+    workflow_dir = repo_path / ".github" / "workflows"
+    if workflow_dir.exists():
+        for yml in workflow_dir.glob("*.yml"):
+            content = yml.read_text(encoding="utf-8")
+            m = re.search(r"clan-id:\s*(\d+)", content)
+            if m:
+                return int(m.group(1))
+    standalone = repo_path / "clan_snapshot.py"
+    if standalone.exists():
+        content = standalone.read_text(encoding="utf-8")
+        m = re.search(r"CLAN_ID\s*=\s*(\d+)", content)
+        if m:
+            return int(m.group(1))
+    return None
+
+
 def write_file(path, content):
     pfx = dry_prefix()
     if DRY_RUN:
@@ -296,7 +335,7 @@ def print_header():
     print(f"  {pfx}NinjaRift Clan Repo Creator")
     print(f"  " + "-" * 40)
     if DRY_RUN:
-        print(f"  Running in DRY-RUN mode — no changes will be made.")
+        print(f"  Running in DRY-RUN mode \u2014 no changes will be made.")
         print()
     print()
 
@@ -561,50 +600,40 @@ def input_clan(state):
             print("     Enter a numeric clan ID.")
 
 
-def input_repo(state):
-    print("\n  2. Repository")
-    clan_info = state["clan_info"]
-    if state["repo_name"]:
-        repo_name = prompt("Repo name", default=state["repo_name"],
-                           validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
-    else:
-        parts = re.split(r'[^a-zA-Z0-9]+', clan_info["name"])
-        default_repo = ''.join(p[:1].upper() + p[1:] for p in parts if p) + "-Reps"
-        repo_name = prompt("Repo name", default=default_repo,
-                           validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
-    display_name = prompt("Display name (for HTML title)", default=state["display_name"] or clan_info["name"])
-    visibility = "private"
-    if prompt_yn("Public repo", default="Y" if state.get("visibility") == "public" else "N"):
-        visibility = "public"
-    if not state["dry_run"]:
-        state["dry_run"] = prompt_yn("Dry-run mode (preview only, no changes)", default="N")
-    state["repo_name"] = repo_name
-    state["display_name"] = display_name
-    state["visibility"] = visibility
-
-
 def input_media(state):
-    print("\n  3. Media (optional)")
+    print("\n  3. Media")
     while True:
-        p = prompt_file("Logo image (drag file here or Enter to skip)", default=state.get("logo_path"))
-        if p is None:
+        raw = input("     Logo image (drag .png file here or Enter to skip): ").strip()
+        if not raw:
             state["logo_path"] = None
             break
+        raw = raw.strip('"').strip("'")
+        p = Path(raw)
+        if not p.exists():
+            print(f"     File not found: {raw}")
+            continue
         ext = p.suffix.lower()
-        if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+        if ext == ".png":
             state["logo_path"] = p
             break
-        print(f"  Unsupported format '{ext}'. Use PNG, JPG, GIF, or WebP.")
+        print(f"     Unsupported format '{ext}'. Only .png is accepted.")
+        print(f"     Convert at: https://cloudconvert.com/{ext[1:] if ext else 'file'}-to-png")
     while True:
-        p = prompt_file("Favicon icon (drag file here or Enter to skip)", default=state.get("favicon_path"))
-        if p is None:
+        raw = input("     Favicon icon (drag .ico file here or Enter to skip): ").strip()
+        if not raw:
             state["favicon_path"] = None
             break
+        raw = raw.strip('"').strip("'")
+        p = Path(raw)
+        if not p.exists():
+            print(f"     File not found: {raw}")
+            continue
         ext = p.suffix.lower()
-        if ext in (".ico", ".png"):
+        if ext == ".ico":
             state["favicon_path"] = p
             break
-        print(f"  Unsupported format '{ext}'. Use ICO or PNG.")
+        print(f"     Unsupported format '{ext}'. Only .ico is accepted.")
+        print(f"     Convert at: https://cloudconvert.com/{ext[1:] if ext else 'file'}-to-ico")
 
 
 def input_colors(state):
@@ -616,7 +645,7 @@ def input_colors(state):
     while theme_choice is None:
         raw = input("     Choose colors:\n"
                     "       1) Default (gray + light pink)\n"
-                    + ("       2) From logo\n" if logo_path else "       2) From logo  [disabled — no logo selected]\n")
+                    + ("       2) From logo\n" if logo_path else "       2) From logo  [disabled \u2014 no logo selected]\n")
                     + "       3) Custom hex\n"
                     "     Choice [1]: ").strip()
         if not raw:
@@ -672,12 +701,51 @@ def input_beta(state):
     state["action_ref"] = "@beta" if use_beta else "@v1"
 
 
-def show_summary(state):
+def input_repo(state):
+    print("\n  2. Repository")
+    clan_info = state.get("clan_info")
+    if state["repo_name"]:
+        repo_name = prompt("Repo name", default=state["repo_name"],
+                           validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
+    else:
+        parts = re.split(r'[^a-zA-Z0-9]+', clan_info["name"])
+        default_repo = ''.join(p[:1].upper() + p[1:] for p in parts if p) + "-Reps"
+        repo_name = prompt("Repo name", default=default_repo,
+                           validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
+
+    update_mode = prompt_yn("Update existing repo", default="N")
+    state["update_mode"] = update_mode
+
+    if update_mode:
+        owner = prompt("Repo owner (GitHub username)", default=GITHUB_USER)
+        display_name = prompt("Display name (for HTML title)", default=state.get("display_name") or clan_info["name"])
+        state["repo_name"] = repo_name
+        state["display_name"] = display_name
+        state["repo_owner"] = owner
+        state["visibility"] = "public"
+        return
+
+    display_name = prompt("Display name (for HTML title)", default=state["display_name"] or clan_info["name"])
+    visibility = "private"
+    if prompt_yn("Public repo", default="Y" if state.get("visibility") == "public" else "N"):
+        visibility = "public"
+    if not state["dry_run"]:
+        state["dry_run"] = prompt_yn("Dry-run mode (preview only, no changes)", default="N")
+    state["repo_name"] = repo_name
+    state["display_name"] = display_name
+    state["visibility"] = visibility
+
+
+def show_summary(state, update_mode=False):
     pfx = dry_prefix()
     print()
-    print(f"  {pfx}Confirm")
+    if update_mode:
+        print(f"  {pfx}Confirm \u2014 UPDATE EXISTING REPO")
+    else:
+        print(f"  {pfx}Confirm \u2014 NEW REPO")
     print(f"    1) Clan ID:        {state['clan_id']} ({state['clan_info']['name']} \u00b7 {state['clan_info']['members']} members)")
-    print(f"    2) Repository:     {state['repo_name']} ({state['visibility']})")
+    repo_field = f"{state.get('repo_owner', GITHUB_USER)}/{state['repo_name']}"
+    print(f"    2) Repository:     {repo_field}" + (f" ({state['visibility']})" if not update_mode else ""))
     print(f"    3) Display name:   {state['display_name']}")
     logo = state.get("logo_path")
     print(f"    4) Logo:           {logo.name + ' (' + str(logo.stat().st_size // 1024) + ' KB)' if logo else '(none)'}")
@@ -686,14 +754,28 @@ def show_summary(state):
     print(f"    6) Accent:         {state['accent_color']}")
     print(f"    7) Accent light:   {state['accent_light']}")
     print(f"    8) Action ref:     {state['action_ref']}")
-    print(f"    9) Dry-run:        {'Yes' if state['dry_run'] else 'No'}")
+    if not update_mode:
+        print(f"    9) Dry-run:        {'Yes' if state['dry_run'] else 'No'}")
     print(f"    0) Start over")
     print()
+    if update_mode:
+        print("  WARNING: The following files will be OVERWRITTEN or DELETED:")
+        print("    - .github/workflows/clan-snapshot.yml  (overwritten)")
+        print("    - theme.json  (overwritten)")
+        print("    - README.md  (overwritten)")
+        print("    - .gitignore  (overwritten)")
+        print("    - clan_snapshot.py  (deleted if exists)")
+        print("    - README.txt  (deleted if exists)")
+        print("    - clan_logo.png  (deleted if no new logo provided)")
+        print("    - favicon.ico  (deleted if no new favicon provided)")
+        print("  All XLSX, HTML, JSON archives will be PRESERVED.")
+        print()
 
 
 def confirm_loop(state):
+    update_mode = state.get("update_mode", False)
     while True:
-        show_summary(state)
+        show_summary(state, update_mode=update_mode)
         choice = input("  Enter # to edit, Y to proceed, N to cancel: ").strip().lower()
         if choice in ("y", "yes"):
             return True
@@ -703,6 +785,7 @@ def confirm_loop(state):
             input_clan(state)
         elif choice == "2":
             input_repo(state)
+            update_mode = state.get("update_mode", False)
         elif choice == "3":
             input_media(state)
         elif choice in ("4", "6", "7"):
@@ -711,7 +794,7 @@ def confirm_loop(state):
             input_beta(state)
         elif choice == "8":
             input_beta(state)
-        elif choice == "9":
+        elif choice == "9" and not update_mode:
             state["dry_run"] = not state["dry_run"]
         elif choice == "0":
             state["clan_id"] = None
@@ -724,13 +807,166 @@ def confirm_loop(state):
             state["accent_color"] = "#999999"
             state["accent_light"] = "#ff6b8a"
             state["action_ref"] = "@v1"
+            state["update_mode"] = False
+            state["repo_owner"] = None
             input_clan(state)
             input_repo(state)
             input_media(state)
             input_colors(state)
             input_beta(state)
+            update_mode = state.get("update_mode", False)
         else:
             print("  Invalid choice.")
+
+
+def update_existing_repo(state):
+    global GITHUB_USER, DRY_RUN, PARENT_DIR
+    pfx = dry_prefix()
+
+    repo_name = state["repo_name"]
+    owner = state.get("repo_owner", GITHUB_USER)
+    display_name = state["display_name"]
+
+    local_repo_path = clone_or_pull_repo(repo_name, owner, update_mode=True)
+    os.chdir(local_repo_path)
+
+    clan_id = detect_clan_id_from_repo(local_repo_path)
+    if clan_id:
+        print(f"  Detected clan ID: {clan_id}")
+        clan_info = fetch_clan_info(clan_id)
+        if clan_info:
+            print(f"  Verified: {clan_info['name']} ({clan_info['members']} members)")
+            if not prompt_yn(f"  Use clan ID {clan_id} ({clan_info['name']})", default="Y"):
+                clan_id = int(prompt("Enter correct clan ID"))
+                clan_info = fetch_clan_info(clan_id)
+                if not clan_info:
+                    print(f"  Clan {clan_id} not found via API.")
+                    if not prompt_yn("Continue anyway", default="N"):
+                        sys.exit(1)
+        else:
+            print(f"  Could not verify clan {clan_id} via API.")
+            if not prompt_yn("Continue with this ID", default="N"):
+                sys.exit(1)
+    else:
+        print("  Could not auto-detect clan ID from repo files.")
+        clan_id = int(prompt("Enter clan ID manually"))
+        clan_info = fetch_clan_info(clan_id)
+        if clan_info:
+            print(f"  Found: {clan_info['name']} ({clan_info['members']} members)")
+
+    state["clan_id"] = clan_id
+    state["clan_info"] = clan_info or {"name": display_name, "members": 0, "id": clan_id}
+
+    input_media(state)
+    input_colors(state)
+    input_beta(state)
+
+    if not confirm_loop(state):
+        print("  Cancelled.")
+        sys.exit(0)
+
+    DRY_RUN = state.get("dry_run", False)
+
+    has_standalone = (local_repo_path / "clan_snapshot.py").exists()
+    if has_standalone:
+        print()
+        print(f"  {'=' * 54}")
+        print(f"  {'!' * 4}  WARNING  {'!' * 4}")
+        print(f"  {'=' * 54}")
+        print(f"  The file clan_snapshot.py will be DELETED.")
+        print(f"  It will be replaced by the composite action.")
+        if not prompt_yn("  Continue", default="N"):
+            print("  Cancelled.")
+            sys.exit(0)
+        print()
+
+    logo_path = state.get("logo_path")
+    favicon_path = state.get("favicon_path")
+    accent_color = state["accent_color"]
+    accent_light = state["accent_light"]
+    action_ref = state["action_ref"]
+    subs = {
+        "CLAN_ID": clan_id,
+        "CLAN_NAME": display_name,
+        "GITHUB_USER": GITHUB_USER,
+        "REPO_NAME": repo_name,
+        "ACTION_REF": action_ref,
+    }
+
+    # Delete old standalone files
+    if has_standalone:
+        print(f"  {pfx}Deleting clan_snapshot.py...")
+        if not DRY_RUN:
+            (local_repo_path / "clan_snapshot.py").unlink(missing_ok=True)
+    readme_txt = local_repo_path / "README.txt"
+    if readme_txt.exists():
+        print(f"  {pfx}Deleting README.txt...")
+        if not DRY_RUN:
+            readme_txt.unlink(missing_ok=True)
+
+    # Delete old media if not replacing
+    old_logo = local_repo_path / "clan_logo.png"
+    if old_logo.exists() and not logo_path:
+        print(f"  {pfx}Deleting old clan_logo.png...")
+        if not DRY_RUN:
+            old_logo.unlink(missing_ok=True)
+    old_favicon = local_repo_path / "favicon.ico"
+    if old_favicon.exists() and not favicon_path:
+        print(f"  {pfx}Deleting old favicon.ico...")
+        if not DRY_RUN:
+            old_favicon.unlink(missing_ok=True)
+
+    # Write new config files
+    print(f"  {pfx}Writing .github/workflows/clan-snapshot.yml...")
+    write_templated_file(
+        local_repo_path / ".github" / "workflows" / "clan-snapshot.yml",
+        "workflow.yml", subs,
+    )
+    print(f"  {pfx}Writing README.md...")
+    write_templated_file(
+        local_repo_path / "README.md",
+        "README.md", subs,
+    )
+    print(f"  {pfx}Writing .gitignore...")
+    write_templated_file(
+        local_repo_path / ".gitignore",
+        ".gitignore", subs,
+    )
+    print(f"  {pfx}Writing theme.json...")
+    theme_json = json.dumps({"accent_color": accent_color, "accent_light": accent_light}, indent=2)
+    write_file(local_repo_path / "theme.json", theme_json)
+
+    # Copy new media
+    if logo_path:
+        print(f"  {pfx}Copying logo...")
+        copy_file(logo_path, local_repo_path / "clan_logo.png")
+    if favicon_path:
+        print(f"  {pfx}Copying favicon...")
+        copy_file(favicon_path, local_repo_path / "favicon.ico")
+
+    # Commit & push
+    if not DRY_RUN:
+        print(f"  Committing and pushing...")
+        os.system("git add -A")
+        os.system('git commit -m "update: migrate to composite action" --allow-empty')
+        os.system("git push origin main")
+    else:
+        print(f"  {pfx}Would commit and push config files")
+
+    # Enable Pages
+    enable_pages(repo_name)
+
+    # Trigger workflow
+    trigger_workflow(repo_name)
+
+    # Done
+    print_summary(repo_name, state["clan_info"])
+
+    if prompt_yn("Open site in browser", default="Y"):
+        site = f"https://{GITHUB_USER}.github.io/{repo_name}/"
+        webbrowser.open(site)
+
+    os.chdir(str(PARENT_DIR))
 
 
 def main():
@@ -759,10 +995,17 @@ def main():
         "accent_light": "#ff6b8a",
         "action_ref": "@v1",
         "dry_run": DRY_RUN,
+        "update_mode": False,
+        "repo_owner": None,
     }
 
     input_clan(state)
     input_repo(state)
+
+    if state.get("update_mode"):
+        update_existing_repo(state)
+        return
+
     input_media(state)
     input_colors(state)
     input_beta(state)
