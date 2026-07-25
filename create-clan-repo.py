@@ -735,13 +735,10 @@ def input_repo(state):
         return
 
     display_name = prompt("Display name (for HTML title)", default=state["display_name"] or clan_info["name"])
-    visibility = "private"
-    if prompt_yn("Public repo", default="Y" if state.get("visibility") == "public" else "N"):
-        visibility = "public"
     if not state["dry_run"]:
         state["dry_run"] = prompt_yn("Dry-run mode (preview only, no changes)", default="N")
     state["display_name"] = display_name
-    state["visibility"] = visibility
+    state["visibility"] = "public"
 
 
 def show_summary(state, update_mode=False):
@@ -753,7 +750,7 @@ def show_summary(state, update_mode=False):
         print(f"  {pfx}Confirm \u2014 NEW REPO")
     print(f"    1) Clan ID:        {state['clan_id']} ({state['clan_info']['name']} \u00b7 {state['clan_info']['members']} members)")
     repo_field = f"{state.get('repo_owner', GITHUB_USER)}/{state['repo_name']}"
-    print(f"    2) Repository:     {repo_field}" + (f" ({state['visibility']})" if not update_mode else ""))
+    print(f"    2) Repository:     {repo_field}")
     print(f"    3) Display name:   {state['display_name']}")
     logo = state.get("logo_path")
     print(f"    4) Logo:           {logo.name + ' (' + str(logo.stat().st_size // 1024) + ' KB)' if logo else '(none)'}")
