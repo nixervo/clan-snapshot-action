@@ -36,7 +36,14 @@ runs:
     - name: Schedule next run
       shell: bash
       run: |
-        sleep 1800
+        NOW_EPOCH=$(date -u +%s)
+        TODAY=$(date -u +%Y-%m-%d)
+        TARGET_EPOCH=$(date -u -d "$TODAY 05:00:00" +%s)
+        [ "$NOW_EPOCH" -gt "$TARGET_EPOCH" ] && TARGET_EPOCH=$((TARGET_EPOCH + 86400))
+        SLEEP_SEC=$((TARGET_EPOCH - NOW_EPOCH))
+        [ "$SLEEP_SEC" -le 0 ] || [ "$SLEEP_SEC" -gt 1800 ] && SLEEP_SEC=1800
+        echo "Sleeping $SLEEP_SEC s until target"
+        sleep "$SLEEP_SEC"
         gh workflow run "Clan Snapshot" --repo ${{ github.repository }}
       env:
         GH_TOKEN: ${{ github.token }}
