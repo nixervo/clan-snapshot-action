@@ -967,9 +967,10 @@ def update_existing_repo(state):
     # Done
     print_summary(repo_name, state["clan_info"])
 
-    if prompt_yn("Open site in browser", default="Y"):
-        site = f"https://{GITHUB_USER}.github.io/{repo_name}/"
-        webbrowser.open(site)
+    repo_owner = state.get("repo_owner", GITHUB_USER)
+    if prompt_yn("Open repo in browser", default="Y"):
+        repo_url = f"https://github.com/{repo_owner}/{repo_name}"
+        webbrowser.open(repo_url)
 
     os.chdir(str(PARENT_DIR))
 
@@ -1106,9 +1107,9 @@ def main():
     # Done
     print_summary(repo_name, clan_info)
 
-    if prompt_yn("Open site in browser", default="Y"):
-        site = f"https://{GITHUB_USER}.github.io/{repo_name}/"
-        webbrowser.open(site)
+    if prompt_yn("Open repo in browser", default="Y"):
+        repo_url = f"https://github.com/{GITHUB_USER}/{repo_name}"
+        webbrowser.open(repo_url)
 
     os.chdir(str(PARENT_DIR))
 
