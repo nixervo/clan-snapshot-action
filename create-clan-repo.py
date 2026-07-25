@@ -705,24 +705,36 @@ def input_repo(state):
     print("\n  2. Repository")
     clan_info = state.get("clan_info")
     if state["repo_name"]:
-        repo_name = prompt("Repo name", default=state["repo_name"],
-                           validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
+        raw = prompt("Repo name (or owner/name)", default=state["repo_name"],
+                     validate=lambda v: re.match(r'^[a-zA-Z0-9_.\-\/]+$', v) is not None)
     else:
         parts = re.split(r'[^a-zA-Z0-9]+', clan_info["name"])
         default_repo = ''.join(p[:1].upper() + p[1:] for p in parts if p) + "-Reps"
-        repo_name = prompt("Repo name", default=default_repo,
-                           validate=lambda v: re.match(r'^[a-zA-Z0-9_.-]+$', v) is not None)
+        raw = prompt("Repo name (or owner/name)", default=default_repo,
+                     validate=lambda v: re.match(r'^[a-zA-Z0-9_.\-\/]+$', v) is not None)
 
-    update_mode = prompt_yn("Update existing repo", default="N")
-    state["update_mode"] = update_mode
+    if "/" in raw:
+        owner, repo_name = raw.split("/", 1)
+    else:
+        owner = GITHUB_USER
+        repo_name = raw
 
-    if update_mode:
-        owner = prompt("Repo owner (GitHub username)", default=GITHUB_USER)
+    exists = False
+    try:
+        gh("repo", "view", f"{owner}/{repo_name}", "--json", "name", capture=True, check=True)
+        exists = True
+    except Exception:
+        pass
+
+    state["update_mode"] = exists
+    state["repo_name"] = repo_name
+    state["repo_owner"] = owner
+    state["visibility"] = "public"
+
+    if exists:
+        print(f"  Found existing repo {owner}/{repo_name}. Updating...")
         display_name = prompt("Display name (for HTML title)", default=state.get("display_name") or clan_info["name"])
-        state["repo_name"] = repo_name
         state["display_name"] = display_name
-        state["repo_owner"] = owner
-        state["visibility"] = "public"
         return
 
     display_name = prompt("Display name (for HTML title)", default=state["display_name"] or clan_info["name"])
@@ -731,7 +743,6 @@ def input_repo(state):
         visibility = "public"
     if not state["dry_run"]:
         state["dry_run"] = prompt_yn("Dry-run mode (preview only, no changes)", default="N")
-    state["repo_name"] = repo_name
     state["display_name"] = display_name
     state["visibility"] = visibility
 
