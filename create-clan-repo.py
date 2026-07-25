@@ -196,7 +196,7 @@ def clone_or_pull_repo(name, owner, update_mode=False):
         if DRY_RUN:
             print(f"  {pfx}Would run: git pull --rebase")
             return target
-        gh("pull", "--rebase", capture=False)
+        subprocess.run(["git", "pull", "--rebase"], check=True)
         return target
     if target.exists():
         print(f"  Directory {target} already exists. Removing...")
