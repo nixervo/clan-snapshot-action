@@ -25,7 +25,7 @@ ACCENT_R = None
 ACCENT_G = None
 ACCENT_B = None
 
-SEASON_API = "https://playninjarift.com/api/refresh_time_website.php"
+SEASON_API = "https://playninjarift.com/api/refresh_time_crew_website.php"
 RANKING_API = "https://playninjarift.com/api/clan_ranking_website.php"
 GOAL_TIERS = [
     (100000, "5 Stamina Rolls"),
@@ -1460,7 +1460,7 @@ def save_daily_history():
         pass
     if not live_season:
         try:
-            req = urllib.request.Request("https://playninjarift.com/api/refresh_time_website.php", headers={"User-Agent": "clan-snapshot/1.0"})
+            req = urllib.request.Request("https://playninjarift.com/api/refresh_time_crew_website.php", headers={"User-Agent": "clan-snapshot/1.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 live_season = json.loads(resp.read().decode()).get("season")
         except:
