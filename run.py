@@ -591,7 +591,7 @@ window.__30mCache = __30M_CACHE__;
   try { var _s = JSON.parse(localStorage.getItem("nr_sort")); if (_s && _s.dir > 0) { sortCol = _s.col; sortDir = _s.dir; applySort(); } } catch(e) {}
 })();
 (function() {
-  var API = "https://playninjarift.com/api/detail_clan_website.php?clan_id=__CLAN_ID__", RK = "https://playninjarift.com/api/clan_ranking_website.php";
+  var API = "https://playninjarift.com/api/detail_crew_website.php?crew_id=__CLAN_ID__", RK = "https://playninjarift.com/api/crew_ranking_website.php";
   var tb = document.querySelector("tbody"), names = [], rws = tb.querySelectorAll("tr");
   for (var i = 0; i < rws.length; i++) names.push(rws[i].cells[1].textContent.trim());
   var autoSeconds = 60, autoEl = document.getElementById("auto-seconds"), searchEl = document.getElementById("search-input"), dotEl = document.getElementById("status-dot"), statusEl = document.getElementById("status-text");
