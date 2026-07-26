@@ -17,7 +17,7 @@ PARENT_DIR = REPOS_BASE
 SCRIPT_DIR = Path(__file__).parent
 TEMPLATES_DIR = SCRIPT_DIR / "templates"
 API_BASE = "https://playninjarift.com/api"
-SEASON_API = "https://playninjarift.com/api/refresh_time_crew_website.php"
+SEASON_API = "https://playninjarift.com/api/refresh_time_website.php"
 RANKING_API = "https://playninjarift.com/api/clan_ranking_website.php"
 
 GITHUB_USER = None
